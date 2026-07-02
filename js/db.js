@@ -83,34 +83,52 @@ async function dbFetchHistory(recordId = null, limit = 300) {
   return data;
 }
 
-// ---------- KULLANICILAR ----------
+// ---------- KULLANICILAR (profiller) ----------
 
 async function dbFetchUsers() {
   const { data, error } = await sb
-    .from("users")
-    .select("id, username, role, created_at")
+    .from("profiles")
+    .select("id, username, email, role, approved, created_at")
     .order("created_at", { ascending: true });
   if (error) throw error;
   return data;
 }
 
-async function dbAddUser(username, password, role) {
-  const password_hash = await sha256Hex(username + ":" + password);
-  const { error } = await sb.from("users").insert({ username, password_hash, role });
+// Yeni üye: geçici bir istemciyle kaydolur (admin oturumu bozulmaz),
+// ardından admin yetkisiyle onaylanıp rolü atanır.
+async function dbAddUser(email, password, username, role) {
+  const { data: existing } = await sb
+    .from("profiles")
+    .select("id")
+    .eq("username", username)
+    .maybeSingle();
+  if (existing) throw new Error("Bu kullanıcı adı zaten mevcut.");
+
+  const temp = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    auth: { storageKey: "utp-temp-signup", persistSession: false, autoRefreshToken: false },
+  });
+  const { data, error } = await temp.auth.signUp({
+    email,
+    password,
+    options: { data: { username } },
+  });
   if (error) {
-    if (error.code === "23505") throw new Error("Bu kullanıcı adı zaten mevcut.");
-    throw error;
+    const msg = error.message || "";
+    if (msg.includes("already registered")) throw new Error("Bu e-posta ile kayıtlı üye zaten var.");
+    throw new Error("Üye oluşturulamadı: " + msg);
   }
+  if (!data.user) throw new Error("Üye oluşturulamadı.");
+
+  const { error: e2 } = await sb
+    .from("profiles")
+    .update({ approved: true, role, username })
+    .eq("id", data.user.id);
+  if (e2) throw e2;
 }
 
-async function dbDeleteUser(id) {
-  const { error } = await sb.from("users").delete().eq("id", id);
-  if (error) throw error;
-}
-
-async function dbChangePassword(username, newPassword) {
-  const password_hash = await sha256Hex(username + ":" + newPassword);
-  const { error } = await sb.from("users").update({ password_hash }).eq("username", username);
+// Üye girişini aç/kapat (kalıcı silme Supabase panelinden: Authentication > Users)
+async function dbSetApproved(id, approved) {
+  const { error } = await sb.from("profiles").update({ approved }).eq("id", id);
   if (error) throw error;
 }
 
@@ -148,8 +166,8 @@ if (DEMO_MODE) {
   ];
 
   let demoUsers = [
-    { id: "u1", username: "admin", role: "admin", created_at: nowISO() },
-    { id: "u2", username: "kullanici", role: "kullanici", created_at: nowISO() },
+    { id: "u1", username: "admin", email: "admin@demo.com", role: "admin", approved: true, created_at: nowISO() },
+    { id: "u2", username: "kullanici", email: "kullanici@demo.com", role: "kullanici", approved: true, created_at: nowISO() },
   ];
 
   let demoHistory = demoRecords.map((r, i) => ({
@@ -192,23 +210,38 @@ if (DEMO_MODE) {
 
   dbFetchUsers = async () => [...demoUsers];
 
-  dbAddUser = async (username, password, role) => {
+  dbAddUser = async (email, password, username, role) => {
     if (demoUsers.some((u) => u.username === username)) throw new Error("Bu kullanıcı adı zaten mevcut.");
-    demoUsers.push({ id: "u" + Date.now(), username, role, created_at: nowISO() });
+    demoUsers.push({ id: "u" + Date.now(), username, email, role, approved: true, created_at: nowISO() });
   };
 
-  dbDeleteUser = async (id) => {
-    demoUsers = demoUsers.filter((u) => u.id !== id);
+  dbSetApproved = async (id, approved) => {
+    const u = demoUsers.find((x) => x.id === id);
+    if (u) u.approved = approved;
   };
 
-  dbChangePassword = async () => {};
-
-  // Önizlemede giriş: sadece demo kullanıcılar çalışır
-  authLogin = async (username, password) => {
-    const demoPass = { admin: "admin123", kullanici: "kullanici123" };
-    if (demoPass[username] !== password) return null;
-    return { id: username, username, role: username === "admin" ? "admin" : "kullanici" };
+  // Önizlemede giriş: sadece demo kullanıcılar çalışır ("admin" veya "admin@demo.com" yazılabilir)
+  authLogin = async (email, password) => {
+    const pairs = {
+      admin: "admin123",
+      "admin@demo.com": "admin123",
+      kullanici: "kullanici123",
+      "kullanici@demo.com": "kullanici123",
+    };
+    if (pairs[email] !== password) return null;
+    const isAdminUser = email.startsWith("admin");
+    return {
+      id: isAdminUser ? "u1" : "u2",
+      username: isAdminUser ? "admin" : "kullanici",
+      role: isAdminUser ? "admin" : "kullanici",
+      email: isAdminUser ? "admin@demo.com" : "kullanici@demo.com",
+    };
   };
+
+  authCurrentUser = async () => null;
+  authLogout = async () => {};
+  authSendResetMail = async () => {};
+  authSetNewPassword = async () => {};
 
   // Üstte uyarı şeridi göster
   document.addEventListener("DOMContentLoaded", () => {

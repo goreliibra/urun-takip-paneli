@@ -61,8 +61,9 @@ function toast(msg, type = "success") {
 // ---------- Onay penceresi (Promise tabanlı) ----------
 
 let confirmResolve = null;
-function confirmDialog(text) {
+function confirmDialog(text, okLabel = "Evet, Sil") {
   $("#confirm-text").textContent = text;
+  $("#btn-confirm-ok").textContent = okLabel;
   $("#modal-confirm").classList.remove("hidden");
   return new Promise((resolve) => (confirmResolve = resolve));
 }
@@ -104,7 +105,7 @@ let pollTimer = null;
 // BAŞLANGIÇ
 // ============================================================
 
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
   if (!isConfigured()) {
     $("#view-setup").classList.remove("hidden");
     return;
@@ -112,15 +113,40 @@ document.addEventListener("DOMContentLoaded", () => {
   initDb();
   wireEvents();
 
-  session = getSession();
+  // Mailden gelen "şifre yenileme" bağlantısını yakala
+  if (sb) {
+    sb.auth.onAuthStateChange((event) => {
+      if (event === "PASSWORD_RECOVERY") handlePasswordRecovery();
+    });
+  }
+
+  session = await authCurrentUser();
   if (session) enterApp();
   else showLogin();
 });
 
+// Mail bağlantısıyla gelindiğinde yeni şifre belirletir
+async function handlePasswordRecovery() {
+  const pw = await passwordDialog("Yeni Şifrenizi Belirleyin");
+  if (pw === null) return;
+  if (pw.length < 6) {
+    toast("Şifre en az 6 karakter olmalı.", "error");
+    return handlePasswordRecovery();
+  }
+  try {
+    await authSetNewPassword(pw);
+    toast("✅ Şifreniz güncellendi.");
+    session = await authCurrentUser();
+    if (session) enterApp();
+  } catch (err) {
+    toast(err.message || "Şifre güncellenemedi.", "error");
+  }
+}
+
 function showLogin() {
   $("#app").classList.add("hidden");
   $("#view-login").classList.remove("hidden");
-  $("#login-username").focus();
+  $("#login-email").focus();
 }
 
 async function enterApp() {
@@ -552,14 +578,25 @@ function renderUsers() {
         u.role === "admin"
           ? '<span class="badge badge-admin">Admin</span>'
           : '<span class="badge badge-kullanici">Kullanıcı</span>';
-      const isSelf = u.username === session.username;
+      const durum = u.approved
+        ? '<span class="badge badge-odendi">Aktif</span>'
+        : '<span class="badge badge-alinmadi">Engelli / Onay bekliyor</span>';
+      const isSelf = u.id === session.id;
       return `<tr>
         <td><b>${esc(u.username)}</b>${isSelf ? ' <span class="muted">(siz)</span>' : ""}</td>
+        <td>${esc(u.email)}</td>
         <td>${roleBadge}</td>
+        <td>${durum}</td>
         <td>${fmtZaman(u.created_at)}</td>
         <td class="td-actions">
-          <button class="btn btn-outline btn-sm" data-uaction="password" data-id="${u.id}">🔑 Şifre</button>
-          ${isSelf ? "" : `<button class="btn btn-danger btn-sm" data-uaction="delete" data-id="${u.id}">🗑 Sil</button>`}
+          <button class="btn btn-outline btn-sm" data-uaction="resetmail" data-id="${u.id}">📧 Şifre maili</button>
+          ${
+            isSelf
+              ? ""
+              : u.approved
+                ? `<button class="btn btn-danger btn-sm" data-uaction="block" data-id="${u.id}">⛔ Engelle</button>`
+                : `<button class="btn btn-primary btn-sm" data-uaction="approve" data-id="${u.id}">✅ Onayla</button>`
+          }
         </td>
       </tr>`;
     })
@@ -568,10 +605,12 @@ function renderUsers() {
 
 async function onUserSubmit(e) {
   e.preventDefault();
+  const email = $("#u-email").value.trim();
   const username = $("#u-username").value.trim();
   const password = $("#u-password").value;
   const role = $("#u-role").value;
 
+  if (!email.includes("@")) return toast("Geçerli bir e-posta adresi yazın.", "error");
   if (!username) return toast("Kullanıcı adı boş olamaz.", "error");
   if (password.length < 6) return toast("Şifre en az 6 karakter olmalı.", "error");
   if (password !== $("#u-password2").value) {
@@ -579,13 +618,13 @@ async function onUserSubmit(e) {
   }
 
   try {
-    await dbAddUser(username, password, role);
+    await dbAddUser(email, password, username, role);
     $("#form-user").reset();
     await loadUsers();
     renderUsers();
-    toast(`✅ "${username}" kullanıcısı eklendi.`);
+    toast(`✅ "${username}" üyesi eklendi. Belirlediğiniz şifreyi kendisine iletin.`);
   } catch (err) {
-    toast(err.message || "Kullanıcı eklenemedi.", "error");
+    toast(err.message || "Üye eklenemedi.", "error");
   }
 }
 
@@ -595,31 +634,40 @@ async function onUsersTableClick(e) {
   const user = usersList.find((u) => u.id === btn.dataset.id);
   if (!user) return;
 
-  if (btn.dataset.uaction === "delete") {
-    // Son admin silinemesin, sistem kilitlenmesin
-    const adminCount = usersList.filter((u) => u.role === "admin").length;
-    if (user.role === "admin" && adminCount <= 1) {
-      return toast("Son admin kullanıcısı silinemez.", "error");
+  if (btn.dataset.uaction === "resetmail") {
+    try {
+      await authSendResetMail(user.email);
+      toast(`📧 Şifre yenileme maili "${user.email}" adresine gönderildi.`);
+    } catch (err) {
+      toast(err.message || "Mail gönderilemedi.", "error");
     }
-    const ok = await confirmDialog(`"${user.username}" kullanıcısı silinecek. Emin misiniz?`);
+  } else if (btn.dataset.uaction === "block") {
+    // Son aktif admin engellenmesin, sistem kilitlenmesin
+    const adminCount = usersList.filter((u) => u.role === "admin" && u.approved).length;
+    if (user.role === "admin" && adminCount <= 1) {
+      return toast("Son aktif admin engellenemez.", "error");
+    }
+    const ok = await confirmDialog(
+      `"${user.username}" artık giriş yapamayacak. Emin misiniz?`,
+      "Evet, Engelle"
+    );
     if (!ok) return;
     try {
-      await dbDeleteUser(user.id);
+      await dbSetApproved(user.id, false);
       await loadUsers();
       renderUsers();
-      toast(`🗑 "${user.username}" silindi.`);
+      toast(`⛔ "${user.username}" engellendi.`);
     } catch (err) {
-      toast("Kullanıcı silinemedi: " + (err.message || err), "error");
+      toast("İşlem yapılamadı: " + (err.message || err), "error");
     }
-  } else if (btn.dataset.uaction === "password") {
-    const newPass = await passwordDialog(`Şifre Değiştir: ${user.username}`);
-    if (newPass === null) return;
-    if (newPass.length < 6) return toast("Şifre en az 6 karakter olmalı.", "error");
+  } else if (btn.dataset.uaction === "approve") {
     try {
-      await dbChangePassword(user.username, newPass);
-      toast(`🔑 "${user.username}" şifresi güncellendi.`);
+      await dbSetApproved(user.id, true);
+      await loadUsers();
+      renderUsers();
+      toast(`✅ "${user.username}" onaylandı, artık giriş yapabilir.`);
     } catch (err) {
-      toast("Şifre değiştirilemedi: " + (err.message || err), "error");
+      toast("İşlem yapılamadı: " + (err.message || err), "error");
     }
   }
 }
@@ -688,7 +736,7 @@ function downloadBlob(blob, filename) {
 
 async function onLoginSubmit(e) {
   e.preventDefault();
-  const username = $("#login-username").value.trim();
+  const email = $("#login-email").value.trim();
   const password = $("#login-password").value;
   const errBox = $("#login-error");
   const btn = $("#btn-login");
@@ -698,14 +746,13 @@ async function onLoginSubmit(e) {
   btn.textContent = "Giriş yapılıyor...";
 
   try {
-    const user = await authLogin(username, password);
+    const user = await authLogin(email, password);
     if (!user) {
-      errBox.textContent = "Kullanıcı adı veya şifre hatalı.";
+      errBox.textContent = "E-posta veya şifre hatalı.";
       errBox.classList.remove("hidden");
       return;
     }
     session = user;
-    saveSession(user);
     $("#login-form").reset();
     await enterApp();
   } catch (err) {
@@ -717,8 +764,8 @@ async function onLoginSubmit(e) {
   }
 }
 
-function logout() {
-  clearSession();
+async function logout() {
+  await authLogout();
   session = null;
   clearInterval(pollTimer);
   location.reload();
@@ -730,6 +777,18 @@ function logout() {
 
 function wireEvents() {
   $("#login-form").addEventListener("submit", onLoginSubmit);
+  $("#btn-forgot").addEventListener("click", async () => {
+    const email = $("#login-email").value.trim();
+    if (!email.includes("@")) {
+      return toast("Önce yukarıdaki alana e-posta adresinizi yazın.", "error");
+    }
+    try {
+      await authSendResetMail(email);
+      toast("📧 Yenileme bağlantısı e-postanıza gönderildi. Spam klasörünü de kontrol edin.");
+    } catch (err) {
+      toast(err.message || "Mail gönderilemedi.", "error");
+    }
+  });
   $("#btn-logout").addEventListener("click", logout);
   $("#btn-menu").addEventListener("click", () => $("#sidebar").classList.toggle("open"));
 

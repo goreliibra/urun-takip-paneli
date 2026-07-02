@@ -7,8 +7,8 @@ ortak veritabanını görür, bir kişi kayıt eklediğinde diğerlerinde otomat
 
 ## Özellikler
 
-- 🔐 Kullanıcı adı + şifre ile giriş (şifreler hash'lenerek saklanır)
-- 👥 İki rol: **Admin** (her şey + silme + kullanıcı yönetimi) ve **Kullanıcı** (ekleme/düzenleme)
+- 🔐 E-posta + şifre ile giriş (Supabase Auth) ve **"Şifremi unuttum" maili** ile şifre yenileme
+- 👥 İki rol: **Admin** (her şey + silme + üye yönetimi) ve **Kullanıcı** (ekleme/düzenleme)
 - 📊 Dashboard: toplam kayıt, toplam fiyat, alınan/kalan para, bugün eklenen, borçlu kayıt sayısı
 - ➕ Kayıt ekleme: kalan para otomatik hesaplanır (elle de değiştirilebilir), negatif değer engellenir
 - 📋 Kayıt listesi: arama (ürün/müşteri/açıklama), tarih + ödeme durumu + kullanıcı filtreleri
@@ -86,14 +86,27 @@ tüm cihazlarda kullanılabilir.
 > Not: Repo private olsa bile GitHub Pages sayfası (Pages ayarına göre) herkese açık
 > olabilir; giriş ekranı olmadan veriye erişilemez ama adresi paylaşmamaya özen gösterin.
 
-## Demo Kullanıcılar
+## Üyelik Sistemi (Supabase Auth)
 
-| Kullanıcı adı | Şifre          | Rol       |
-|---------------|----------------|-----------|
-| `admin`       | `admin123`     | Admin     |
-| `kullanici`   | `kullanici123` | Kullanıcı |
+Kurulumun üyelik kısmı için `db/upgrade-auth.sql` dosyasını SQL Editor'de çalıştırın ve
+Supabase panelinde iki ayar yapın:
 
-⚠️ Gerçek kullanıma geçmeden önce **Kullanıcılar** sayfasından bu şifreleri değiştirin.
+1. **Authentication → URL Configuration → Site URL:** uygulamanın yayın adresi
+   (örn. `https://KULLANICIADI.github.io/urun-takip-paneli/`). Yerel test için
+   `http://localhost:8000` adresini de "Redirect URLs" listesine ekleyin.
+2. **Authentication → Sign In / Providers → Email → "Confirm email" kapatın.**
+   (Kapatmazsanız her yeni üyenin mailindeki doğrulama bağlantısına tıklaması gerekir.)
+
+Önemli davranışlar:
+
+- Sisteme kaydolan **ilk üye otomatik olarak onaylı Admin** olur.
+- Sonraki üyeler admin tarafından **Kullanıcılar** sayfasından eklenir (e-posta + şifre + rol).
+- Şifresini unutan, giriş ekranındaki **"Şifremi unuttum"** bağlantısıyla mailine
+  yenileme bağlantısı alır. (Supabase ücretsiz planda mail gönderimi saatte ~2 ile sınırlıdır.)
+- Admin bir üyeyi **engelleyebilir/onaylayabilir**; kalıcı silme Supabase panelinden yapılır
+  (Authentication → Users).
+
+Demo giriş bilgileri (`admin` / `admin123`) yalnızca `?demo=1` önizleme modunda geçerlidir.
 
 ## Dosya Yapısı
 
@@ -110,18 +123,16 @@ urun-takip-paneli/
 
 ## Güvenlik Notları
 
-- Şifreler veritabanında **SHA-256 hash** olarak saklanır, açık metin tutulmaz.
-- Giriş yapmayan kullanıcı hiçbir sayfayı göremez; admin olmayan kullanıcı,
-  kullanıcı yönetimi sayfasına giremez ve silme butonu görmez.
-- Aynı kullanıcı adı iki kez oluşturulamaz (veritabanı seviyesinde engelli).
-- Bu uygulama küçük ve **birbirine güvenen bir ekip** (3-4 kişi) için tasarlandı.
-  Yetki kontrolü uygulama katmanındadır; bağlantı anahtarı (anon key) sayfa kaynağında
-  görünür. Hassas/kurumsal veriler için ileride Supabase Auth + satır bazlı yetki
-  (RLS) kurallarına geçilmesi önerilir — kod buna uygun, geliştirilebilir yapıdadır.
+- Şifreler Supabase'in üyelik sisteminde güvenle (bcrypt) saklanır, açık metin tutulmaz.
+- Veritabanı **satır bazlı güvenlik (RLS)** ile kilitlidir: giriş yapmamış veya
+  onaylanmamış hiç kimse hiçbir veriyi okuyamaz/yazamaz — sayfa kaynağındaki
+  bağlantı anahtarı tek başına veriye erişim sağlamaz.
+- Kayıt silme yetkisi veritabanı seviyesinde yalnızca admin rolündedir.
+- İşlem geçmişi tablosu değiştirilemez/silinemez (denetim izi korunur).
+- Aynı kullanıcı adı veya e-posta iki kez kullanılamaz.
 
 ## Geliştirme Fikirleri
 
-- Supabase Auth ile gerçek oturum yönetimi (JWT + RLS)
 - Taksit / ödeme planı takibi (bir kayda birden çok ödeme)
 - PDF rapor çıktısı
 - Aylık özet grafikleri

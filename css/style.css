@@ -117,6 +117,17 @@ input:focus, select:focus, textarea:focus {
 .btn-block { width: 100%; justify-content: center; }
 .btn-icon { background: none; border: none; font-size: 1.3rem; cursor: pointer; color: #fff; display: none; }
 
+.login-extra { text-align: center; margin-top: 12px; }
+.link-btn {
+  background: none; border: none;
+  color: var(--navy-light);
+  font-size: 0.85rem;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 0;
+}
+.link-btn:hover { color: var(--navy); }
+
 .error-box {
   background: #fef2f2; color: var(--red);
   border: 1px solid #fecaca; border-radius: 8px;

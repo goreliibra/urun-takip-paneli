@@ -33,12 +33,15 @@
         <p class="muted">Devam etmek için giriş yapın</p>
       </div>
       <form id="login-form" autocomplete="off">
-        <label for="login-username">Kullanıcı Adı</label>
-        <input type="text" id="login-username" placeholder="Kullanıcı adınız" required autofocus />
+        <label for="login-email">E-posta</label>
+        <input type="text" id="login-email" placeholder="ornek@mail.com" required autofocus />
         <label for="login-password">Şifre</label>
         <input type="password" id="login-password" placeholder="Şifreniz" required />
         <div id="login-error" class="error-box hidden"></div>
         <button type="submit" class="btn btn-primary btn-block" id="btn-login">Giriş Yap</button>
+        <div class="login-extra">
+          <button type="button" id="btn-forgot" class="link-btn">Şifremi unuttum</button>
+        </div>
       </form>
     </div>
   </section>
@@ -217,8 +220,12 @@
             <form id="form-user" autocomplete="off">
               <div class="form-grid">
                 <div class="form-field">
+                  <label for="u-email">E-posta *</label>
+                  <input type="text" id="u-email" required placeholder="uye@mail.com" />
+                </div>
+                <div class="form-field">
                   <label for="u-username">Kullanıcı Adı *</label>
-                  <input type="text" id="u-username" required />
+                  <input type="text" id="u-username" required placeholder="Listelerde görünecek isim" />
                 </div>
                 <div class="form-field">
                   <label for="u-password">Şifre *</label>
@@ -236,7 +243,8 @@
                   </select>
                 </div>
               </div>
-              <button type="submit" class="btn btn-primary">➕ Kullanıcı Ekle</button>
+              <button type="submit" class="btn btn-primary">➕ Üye Ekle</button>
+              <p class="muted">Belirlediğiniz şifreyi üyeye kendiniz iletin. Üye daha sonra "Şifremi unuttum" ile mailinden kendisi de değiştirebilir.</p>
             </form>
           </div>
 
@@ -245,7 +253,9 @@
               <thead>
                 <tr>
                   <th>Kullanıcı Adı</th>
+                  <th>E-posta</th>
                   <th>Rol</th>
+                  <th>Durum</th>
                   <th>Oluşturulma</th>
                   <th>İşlem</th>
                 </tr>

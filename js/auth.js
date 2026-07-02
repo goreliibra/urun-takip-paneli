@@ -1,50 +1,64 @@
 // ============================================================
-// ÜRÜN TAKİP PANELİ - Giriş / Oturum İşlemleri
-// Şifreler veritabanında SHA-256 hash olarak saklanır:
-//   hash = sha256("kullaniciadi:sifre")
+// ÜRÜN TAKİP PANELİ - Giriş / Oturum (Supabase Auth, e-posta tabanlı)
+// Şifreler Supabase üyelik sisteminde güvenle saklanır.
+// "Şifremi unuttum" mailleri Supabase tarafından gönderilir.
 // ============================================================
 
-const SESSION_KEY = "utp_session";
-
-// Metni SHA-256 ile hashler, hex string döndürür
-async function sha256Hex(text) {
-  if (!window.crypto || !window.crypto.subtle) {
-    throw new Error(
-      "Tarayıcı güvenli bağlam gerektiriyor. Sayfayı https:// veya http://localhost üzerinden açın."
-    );
+// E-posta + şifre ile giriş. Başarılıysa kullanıcı bilgisi, hatalıysa null döner.
+async function authLogin(email, password) {
+  const { data, error } = await sb.auth.signInWithPassword({ email, password });
+  if (error) {
+    const msg = error.message || "";
+    if (msg.includes("Invalid login credentials")) return null;
+    if (msg.includes("Email not confirmed"))
+      throw new Error("E-posta adresiniz henüz doğrulanmamış. Gelen kutunuzu kontrol edin.");
+    throw new Error("Giriş yapılamadı: " + msg);
   }
-  const data = new TextEncoder().encode(text);
-  const buf = await window.crypto.subtle.digest("SHA-256", data);
-  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
+
+  const profile = await authLoadProfile(data.user.id);
+  if (!profile) {
+    await sb.auth.signOut();
+    throw new Error("Profil bulunamadı. Yöneticinizle iletişime geçin.");
+  }
+  if (!profile.approved) {
+    await sb.auth.signOut();
+    throw new Error("Hesabınız henüz onaylanmamış. Yöneticinizin onayını bekleyin.");
+  }
+  return { id: profile.id, username: profile.username, role: profile.role, email: profile.email };
 }
 
-// Kullanıcı adı + şifre doğrulaması. Başarılıysa kullanıcı bilgisi, değilse null döner.
-async function authLogin(username, password) {
-  const hash = await sha256Hex(username + ":" + password);
-  const { data, error } = await sb
-    .from("users")
-    .select("id, username, role, password_hash")
-    .eq("username", username)
-    .maybeSingle();
-
-  if (error) throw new Error("Sunucuya ulaşılamadı: " + error.message);
-  if (!data || data.password_hash !== hash) return null;
-
-  return { id: data.id, username: data.username, role: data.role };
+async function authLoadProfile(userId) {
+  const { data, error } = await sb.from("profiles").select("*").eq("id", userId).maybeSingle();
+  if (error) throw error;
+  return data;
 }
 
-function saveSession(user) {
-  localStorage.setItem(SESSION_KEY, JSON.stringify(user));
-}
-
-function getSession() {
+// Sayfa açılışında mevcut oturumu kontrol eder (oturum tarayıcıda güvenle saklanır)
+async function authCurrentUser() {
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) return null;
   try {
-    return JSON.parse(localStorage.getItem(SESSION_KEY));
+    const profile = await authLoadProfile(session.user.id);
+    if (!profile || !profile.approved) return null;
+    return { id: profile.id, username: profile.username, role: profile.role, email: profile.email };
   } catch {
     return null;
   }
 }
 
-function clearSession() {
-  localStorage.removeItem(SESSION_KEY);
+async function authLogout() {
+  await sb.auth.signOut();
+}
+
+// Şifre yenileme maili gönderir (bağlantı, kullanıcıyı uygulamaya geri getirir)
+async function authSendResetMail(email) {
+  const redirect = location.origin + location.pathname;
+  const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: redirect });
+  if (error) throw new Error("Mail gönderilemedi: " + error.message);
+}
+
+// Mailden gelen bağlantıyla girildiğinde yeni şifreyi kaydeder
+async function authSetNewPassword(newPassword) {
+  const { error } = await sb.auth.updateUser({ password: newPassword });
+  if (error) throw new Error("Şifre güncellenemedi: " + error.message);
 }
