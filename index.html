@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ürün Takip Paneli</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+  <!-- ============ KURULUM UYARISI (config.js doldurulmadıysa) ============ -->
+  <section id="view-setup" class="center-screen hidden">
+    <div class="card setup-card">
+      <h1>⚙️ Kurulum Gerekli</h1>
+      <p>Uygulama henüz veritabanına bağlanmadı. Şu adımları izleyin:</p>
+      <ol>
+        <li><a href="https://supabase.com" target="_blank" rel="noopener">supabase.com</a> adresinde ücretsiz hesap açın ve yeni proje oluşturun.</li>
+        <li>Supabase panelinde <b>SQL Editor</b>'ü açın, projedeki <code>db/setup.sql</code> dosyasının içeriğini yapıştırıp <b>Run</b> deyin.</li>
+        <li><b>Project Settings → API</b> sayfasından <b>Project URL</b> ve <b>anon public</b> anahtarını kopyalayın.</li>
+        <li>Bu projedeki <code>js/config.js</code> dosyasına yapıştırın.</li>
+        <li>Sayfayı yenileyin.</li>
+      </ol>
+      <p class="muted">Ayrıntılı anlatım için <code>README.md</code> dosyasına bakın.</p>
+    </div>
+  </section>
+
+  <!-- ============ GİRİŞ SAYFASI ============ -->
+  <section id="view-login" class="center-screen hidden">
+    <div class="card login-card">
+      <div class="login-brand">
+        <div class="login-logo">₺</div>
+        <h1>Ürün Takip Paneli</h1>
+        <p class="muted">Devam etmek için giriş yapın</p>
+      </div>
+      <form id="login-form" autocomplete="off">
+        <label for="login-username">Kullanıcı Adı</label>
+        <input type="text" id="login-username" placeholder="Kullanıcı adınız" required autofocus />
+        <label for="login-password">Şifre</label>
+        <input type="password" id="login-password" placeholder="Şifreniz" required />
+        <div id="login-error" class="error-box hidden"></div>
+        <button type="submit" class="btn btn-primary btn-block" id="btn-login">Giriş Yap</button>
+      </form>
+    </div>
+  </section>
+
+  <!-- ============ UYGULAMA ============ -->
+  <div id="app" class="hidden">
+
+    <header class="topbar">
+      <button id="btn-menu" class="btn-icon" aria-label="Menü">☰</button>
+      <div class="topbar-brand">Ürün Takip Paneli</div>
+      <div class="topbar-user">
+        <span id="current-user-name"></span>
+        <span id="current-user-role" class="badge badge-role"></span>
+        <button id="btn-logout" class="btn btn-outline btn-sm">Çıkış Yap</button>
+      </div>
+    </header>
+
+    <div class="layout">
+      <nav id="sidebar" class="sidebar">
+        <button class="nav-link active" data-view="dashboard">📊 Dashboard</button>
+        <button class="nav-link" data-view="new">➕ Yeni Kayıt</button>
+        <button class="nav-link" data-view="records">📋 Kayıt Listesi</button>
+        <button class="nav-link" data-view="history">🕓 İşlem Geçmişi</button>
+        <button class="nav-link hidden" data-view="users" id="nav-users">👥 Kullanıcılar</button>
+      </nav>
+
+      <main class="content">
+
+        <!-- ==== DASHBOARD ==== -->
+        <section id="view-dashboard" class="view">
+          <h2>Genel Özet</h2>
+          <div class="stats-grid">
+            <div class="stat-card">
+              <div class="stat-label">Toplam Kayıt</div>
+              <div class="stat-value" id="stat-total-count">0</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Toplam Ürün Fiyatı</div>
+              <div class="stat-value" id="stat-total-price">0</div>
+            </div>
+            <div class="stat-card stat-green">
+              <div class="stat-label">Toplam Alınan Para</div>
+              <div class="stat-value" id="stat-total-paid">0</div>
+            </div>
+            <div class="stat-card stat-red">
+              <div class="stat-label">Toplam Kalan Para</div>
+              <div class="stat-value" id="stat-total-due">0</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Bugün Eklenen</div>
+              <div class="stat-value" id="stat-today-count">0</div>
+            </div>
+            <div class="stat-card stat-amber">
+              <div class="stat-label">Borcu Kalan Kayıt</div>
+              <div class="stat-value" id="stat-debt-count">0</div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==== YENİ KAYIT ==== -->
+        <section id="view-new" class="view hidden">
+          <h2>Yeni Kayıt Ekle</h2>
+          <div class="card form-card">
+            <form id="form-new" autocomplete="off">
+              <div class="form-grid">
+                <div class="form-field">
+                  <label for="n-urun">Ürün Adı *</label>
+                  <input type="text" id="n-urun" required placeholder="Örn: Döner Ocağı" />
+                </div>
+                <div class="form-field">
+                  <label for="n-musteri">Müşteri Adı</label>
+                  <input type="text" id="n-musteri" placeholder="İsteğe bağlı" />
+                </div>
+                <div class="form-field">
+                  <label for="n-fiyat">Ürün Fiyatı *</label>
+                  <input type="number" id="n-fiyat" required min="0" step="0.01" placeholder="0,00" />
+                </div>
+                <div class="form-field">
+                  <label for="n-alinan">Alınan Para</label>
+                  <input type="number" id="n-alinan" min="0" step="0.01" placeholder="0,00" />
+                </div>
+                <div class="form-field">
+                  <label for="n-kalan">Kalan Para <span class="muted">(otomatik, elle de değiştirilebilir)</span></label>
+                  <input type="number" id="n-kalan" min="0" step="0.01" placeholder="0,00" />
+                </div>
+                <div class="form-field">
+                  <label for="n-tarih">Tarih</label>
+                  <input type="date" id="n-tarih" />
+                </div>
+                <div class="form-field form-field-full">
+                  <label for="n-aciklama">Açıklama / Not</label>
+                  <textarea id="n-aciklama" rows="2" placeholder="İsteğe bağlı"></textarea>
+                </div>
+              </div>
+              <button type="submit" class="btn btn-primary">💾 Kaydet</button>
+            </form>
+          </div>
+        </section>
+
+        <!-- ==== KAYIT LİSTESİ ==== -->
+        <section id="view-records" class="view hidden">
+          <div class="view-head">
+            <h2>Kayıt Listesi</h2>
+            <div class="view-actions">
+              <button id="btn-refresh" class="btn btn-outline btn-sm">🔄 Yenile</button>
+              <button id="btn-export-csv" class="btn btn-outline btn-sm">⬇ CSV</button>
+              <button id="btn-export-xlsx" class="btn btn-outline btn-sm">⬇ Excel</button>
+            </div>
+          </div>
+
+          <div class="card filter-bar">
+            <input type="text" id="f-search" placeholder="🔍 Ürün, müşteri veya açıklama ara..." />
+            <div class="filter-row">
+              <div class="filter-field">
+                <label>Başlangıç</label>
+                <input type="date" id="f-date-from" />
+              </div>
+              <div class="filter-field">
+                <label>Bitiş</label>
+                <input type="date" id="f-date-to" />
+              </div>
+              <div class="filter-field">
+                <label>Ödeme Durumu</label>
+                <select id="f-durum">
+                  <option value="">Tümü</option>
+                  <option value="odendi">Ödendi</option>
+                  <option value="borc">Borç var</option>
+                  <option value="alinmadi">Ödeme alınmadı</option>
+                </select>
+              </div>
+              <div class="filter-field">
+                <label>Kullanıcı</label>
+                <select id="f-user">
+                  <option value="">Tümü</option>
+                </select>
+              </div>
+              <button id="btn-clear-filters" class="btn btn-outline btn-sm">Temizle</button>
+            </div>
+          </div>
+
+          <p class="muted" id="records-count"></p>
+
+          <div class="table-wrap card">
+            <table id="records-table">
+              <thead>
+                <tr>
+                  <th>Tarih</th>
+                  <th>Ürün Adı</th>
+                  <th>Müşteri</th>
+                  <th class="num">Fiyat</th>
+                  <th class="num">Alınan</th>
+                  <th class="num">Kalan</th>
+                  <th>Durum</th>
+                  <th>Açıklama</th>
+                  <th>Ekleyen</th>
+                  <th>İşlem</th>
+                </tr>
+              </thead>
+              <tbody id="records-tbody"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- ==== İŞLEM GEÇMİŞİ ==== -->
+        <section id="view-history" class="view hidden">
+          <h2>İşlem Geçmişi</h2>
+          <p class="muted">Tüm kayıtlarda yapılan ekleme, düzenleme ve silme işlemleri.</p>
+          <div id="history-list" class="history-list"></div>
+        </section>
+
+        <!-- ==== KULLANICI YÖNETİMİ (sadece admin) ==== -->
+        <section id="view-users" class="view hidden">
+          <h2>Kullanıcı Yönetimi</h2>
+          <div class="card form-card">
+            <h3>Yeni Kullanıcı Ekle</h3>
+            <form id="form-user" autocomplete="off">
+              <div class="form-grid">
+                <div class="form-field">
+                  <label for="u-username">Kullanıcı Adı *</label>
+                  <input type="text" id="u-username" required />
+                </div>
+                <div class="form-field">
+                  <label for="u-password">Şifre *</label>
+                  <input type="password" id="u-password" required minlength="6" />
+                </div>
+                <div class="form-field">
+                  <label for="u-role">Rol</label>
+                  <select id="u-role">
+                    <option value="kullanici">Kullanıcı</option>
+                    <option value="admin">Admin</option>
+                  </select>
+                </div>
+              </div>
+              <button type="submit" class="btn btn-primary">➕ Kullanıcı Ekle</button>
+            </form>
+          </div>
+
+          <div class="table-wrap card">
+            <table>
+              <thead>
+                <tr>
+                  <th>Kullanıcı Adı</th>
+                  <th>Rol</th>
+                  <th>Oluşturulma</th>
+                  <th>İşlem</th>
+                </tr>
+              </thead>
+              <tbody id="users-tbody"></tbody>
+            </table>
+          </div>
+        </section>
+
+      </main>
+    </div>
+  </div>
+
+  <!-- ============ DÜZENLEME PENCERESİ ============ -->
+  <div id="modal-edit" class="modal-overlay hidden">
+    <div class="modal">
+      <h3>Kaydı Düzenle</h3>
+      <p class="muted" id="edit-meta"></p>
+      <form id="form-edit" autocomplete="off">
+        <div class="form-grid">
+          <div class="form-field">
+            <label for="e-urun">Ürün Adı *</label>
+            <input type="text" id="e-urun" required />
+          </div>
+          <div class="form-field">
+            <label for="e-musteri">Müşteri Adı</label>
+            <input type="text" id="e-musteri" />
+          </div>
+          <div class="form-field">
+            <label for="e-fiyat">Ürün Fiyatı *</label>
+            <input type="number" id="e-fiyat" required min="0" step="0.01" />
+          </div>
+          <div class="form-field">
+            <label for="e-alinan">Alınan Para</label>
+            <input type="number" id="e-alinan" min="0" step="0.01" />
+          </div>
+          <div class="form-field">
+            <label for="e-kalan">Kalan Para</label>
+            <input type="number" id="e-kalan" min="0" step="0.01" />
+          </div>
+          <div class="form-field">
+            <label for="e-tarih">Tarih</label>
+            <input type="date" id="e-tarih" />
+          </div>
+          <div class="form-field form-field-full">
+            <label for="e-aciklama">Açıklama / Not</label>
+            <textarea id="e-aciklama" rows="2"></textarea>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-outline" id="btn-edit-cancel">Vazgeç</button>
+          <button type="submit" class="btn btn-primary">💾 Değişiklikleri Kaydet</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ============ ONAY PENCERESİ ============ -->
+  <div id="modal-confirm" class="modal-overlay hidden">
+    <div class="modal modal-sm">
+      <h3>Emin misiniz?</h3>
+      <p id="confirm-text"></p>
+      <div class="modal-actions">
+        <button class="btn btn-outline" id="btn-confirm-cancel">Vazgeç</button>
+        <button class="btn btn-danger" id="btn-confirm-ok">Evet, Sil</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ KAYIT GEÇMİŞİ PENCERESİ ============ -->
+  <div id="modal-history" class="modal-overlay hidden">
+    <div class="modal">
+      <h3 id="history-title">Kayıt Geçmişi</h3>
+      <div id="record-history-list" class="history-list"></div>
+      <div class="modal-actions">
+        <button class="btn btn-outline" id="btn-history-close">Kapat</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ ŞİFRE DEĞİŞTİRME PENCERESİ ============ -->
+  <div id="modal-password" class="modal-overlay hidden">
+    <div class="modal modal-sm">
+      <h3 id="password-title">Şifre Değiştir</h3>
+      <div class="form-field">
+        <label for="p-password">Yeni Şifre (en az 6 karakter)</label>
+        <input type="password" id="p-password" minlength="6" />
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-outline" id="btn-password-cancel">Vazgeç</button>
+        <button class="btn btn-primary" id="btn-password-save">Kaydet</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ BİLDİRİM ============ -->
+  <div id="toast" class="toast hidden"></div>
+
+  <!-- Kütüphaneler -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+
+  <!-- Uygulama -->
+  <script src="js/config.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/db.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
