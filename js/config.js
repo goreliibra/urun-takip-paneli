@@ -6,8 +6,8 @@
 //   - "anon public" anahtar -> SUPABASE_ANON_KEY
 // ============================================================
 
-const SUPABASE_URL = "BURAYA_SUPABASE_URL_YAPISTIR";
-const SUPABASE_ANON_KEY = "BURAYA_ANON_KEY_YAPISTIR";
+const SUPABASE_URL = "https://oenfuqkakqfpfxptbsgz.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_tDi8R0dGiktbhH-UoQTeeQ_rwvrkTyH";
 
 // Para birimi: "EUR", "TRY", "USD" ...
 const CURRENCY = "EUR";
