@@ -79,6 +79,7 @@ let passwordResolve = null;
 function passwordDialog(title) {
   $("#password-title").textContent = title;
   $("#p-password").value = "";
+  $("#p-password2").value = "";
   $("#modal-password").classList.remove("hidden");
   $("#p-password").focus();
   return new Promise((resolve) => (passwordResolve = resolve));
@@ -573,6 +574,9 @@ async function onUserSubmit(e) {
 
   if (!username) return toast("Kullanıcı adı boş olamaz.", "error");
   if (password.length < 6) return toast("Şifre en az 6 karakter olmalı.", "error");
+  if (password !== $("#u-password2").value) {
+    return toast("Şifreler birbirini tutmuyor. İki alana da aynı şifreyi yazın.", "error");
+  }
 
   try {
     await dbAddUser(username, password, role);
@@ -772,7 +776,12 @@ function wireEvents() {
   );
 
   // Şifre penceresi
-  $("#btn-password-save").addEventListener("click", () => closePassword($("#p-password").value));
+  $("#btn-password-save").addEventListener("click", () => {
+    if ($("#p-password").value !== $("#p-password2").value) {
+      return toast("Şifreler birbirini tutmuyor. İki alana da aynı şifreyi yazın.", "error");
+    }
+    closePassword($("#p-password").value);
+  });
   $("#btn-password-cancel").addEventListener("click", () => closePassword(null));
 
   // Kullanıcı yönetimi
