@@ -108,6 +108,13 @@ Supabase panelinde iki ayar yapın:
 
 Demo giriş bilgileri (`admin` / `admin123`) yalnızca `?demo=1` önizleme modunda geçerlidir.
 
+### Kullanıcı adıyla giriş
+
+E-postasız eklenen üyeler artık giriş ekranına kendi **kullanıcı adlarını** yazarak
+girebilir (e-posta girmelerine gerek yok). Bunun çalışması için `db/upgrade-username-login.sql`
+dosyasını bir kez SQL Editor'de çalıştırmanız gerekir (mevcut veriye dokunmaz, sadece
+kullanıcı adını arka plandaki e-postaya çeviren küçük bir fonksiyon ekler).
+
 ## Dosya Yapısı
 
 ```

@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="noindex, nofollow" />
   <title>Ürün Takip Paneli</title>
   <link rel="stylesheet" href="css/style.css" />
 </head>
@@ -33,8 +34,8 @@
         <p class="muted">Devam etmek için giriş yapın</p>
       </div>
       <form id="login-form" autocomplete="off">
-        <label for="login-email">E-posta</label>
-        <input type="text" id="login-email" placeholder="ornek@mail.com" required autofocus />
+        <label for="login-email">E-posta veya Kullanıcı Adı</label>
+        <input type="text" id="login-email" placeholder="ornek@mail.com veya kullanıcı adınız" required autofocus />
         <label for="login-password">Şifre</label>
         <input type="password" id="login-password" placeholder="Şifreniz" required />
         <div id="login-error" class="error-box hidden"></div>
@@ -325,7 +326,7 @@
                 </div>
               </div>
               <button type="submit" class="btn btn-primary">➕ Üye Ekle</button>
-              <p class="muted">Belirlediğiniz şifreyi üyeye kendiniz iletin. Üye daha sonra "Şifremi unuttum" ile mailinden kendisi de değiştirebilir.</p>
+              <p class="muted">Belirlediğiniz şifreyi üyeye kendiniz iletin. E-posta girdiyseniz üye "Şifremi unuttum" ile kendisi de değiştirebilir; e-postasız üyeler kullanıcı adı + şifre ile giriş yapar ve şifresini yalnızca siz değiştirebilirsiniz.</p>
             </form>
           </div>
 

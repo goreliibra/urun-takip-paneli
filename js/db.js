@@ -100,7 +100,7 @@ async function dbAddUser(email, password, username, role) {
   const { data: existing } = await sb
     .from("profiles")
     .select("id")
-    .eq("username", username)
+    .ilike("username", username)
     .maybeSingle();
   if (existing) throw new Error("Bu kullanıcı adı zaten mevcut.");
 

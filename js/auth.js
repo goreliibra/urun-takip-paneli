@@ -4,8 +4,18 @@
 // "Şifremi unuttum" mailleri Supabase tarafından gönderilir.
 // ============================================================
 
-// E-posta + şifre ile giriş. Başarılıysa kullanıcı bilgisi, hatalıysa null döner.
-async function authLogin(email, password) {
+// E-posta VEYA kullanıcı adı + şifre ile giriş. Başarılıysa kullanıcı bilgisi, hatalıysa null döner.
+async function authLogin(identifier, password) {
+  let email = identifier;
+  if (!email.includes("@")) {
+    const { data: resolved, error: resolveErr } = await sb.rpc("resolve_login_email", {
+      p_identifier: identifier,
+    });
+    if (resolveErr) throw new Error("Giriş yapılamadı: " + resolveErr.message);
+    if (!resolved) return null; // bilinmeyen kullanıcı adı -> şifre hatalı ile aynı mesaj
+    email = resolved;
+  }
+
   const { data, error } = await sb.auth.signInWithPassword({ email, password });
   if (error) {
     const msg = error.message || "";

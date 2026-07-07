@@ -946,7 +946,7 @@ async function onLoginSubmit(e) {
   try {
     const user = await authLogin(email, password);
     if (!user) {
-      errBox.textContent = "E-posta veya şifre hatalı.";
+      errBox.textContent = "Kullanıcı adı/e-posta veya şifre hatalı.";
       errBox.classList.remove("hidden");
       return;
     }
@@ -978,7 +978,10 @@ function wireEvents() {
   $("#btn-forgot").addEventListener("click", async () => {
     const email = $("#login-email").value.trim();
     if (!email.includes("@")) {
-      return toast("Önce yukarıdaki alana e-posta adresinizi yazın.", "error");
+      return toast(
+        "Şifre sıfırlama maili yalnızca e-postalı üyelerde çalışır. Kullanıcı adıyla giriş yapıyorsanız yöneticinizden yeni şifre isteyin.",
+        "error"
+      );
     }
     try {
       await authSendResetMail(email);
