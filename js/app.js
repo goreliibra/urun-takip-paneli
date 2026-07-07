@@ -94,12 +94,17 @@ function closePassword(result) {
 
 // ---------- Durum ----------
 
-let session = null; // { id, username, role }
+let session = null; // { id, username, role, email }
 let records = [];
 let usersList = [];
+let stockItems = [];
+let stockMoves = [];
 let currentView = "dashboard";
 let editingRecord = null;
 let pollTimer = null;
+
+// E-postasız eklenen üyeler için otomatik üretilen adres uzantısı
+const FAKE_MAIL_DOMAIN = "@uye.uruntakip-paneli.com";
 
 // ============================================================
 // BAŞLANGIÇ
@@ -160,6 +165,7 @@ async function enterApp() {
   $("#nav-users").classList.toggle("hidden", session.role !== "admin");
 
   $("#n-tarih").value = todayISO();
+  $("#s-tarih").value = todayISO();
 
   await loadAll();
   showView("dashboard");
@@ -168,6 +174,9 @@ async function enterApp() {
   dbSubscribeRecords(async () => {
     await loadRecords();
     renderCurrentView();
+  });
+  dbSubscribeStock(() => {
+    if (currentView === "stok") renderStok();
   });
 
   // Yedek: belirli aralıklarla ve sekme öne gelince yenile
@@ -219,13 +228,20 @@ function showView(name) {
   $$(".view").forEach((v) => v.classList.add("hidden"));
   $(`#view-${name}`).classList.remove("hidden");
   $$(".nav-link").forEach((l) => l.classList.toggle("active", l.dataset.view === name));
-  $("#sidebar").classList.remove("open");
+  setSidebar(false);
   renderCurrentView();
+}
+
+// Mobil yan menüyü aç/kapat (karartma perdesiyle birlikte)
+function setSidebar(open) {
+  $("#sidebar").classList.toggle("open", open);
+  $("#sidebar-backdrop").classList.toggle("hidden", !open);
 }
 
 function renderCurrentView() {
   if (currentView === "dashboard") renderDashboard();
   else if (currentView === "records") renderRecords();
+  else if (currentView === "stok") renderStok();
   else if (currentView === "history") renderHistoryPage();
   else if (currentView === "users") renderUsers();
 }
@@ -494,6 +510,175 @@ async function deleteRecord(record) {
 }
 
 // ============================================================
+// STOK TAKİBİ
+// ============================================================
+
+const fmtMiktar = (n) => new Intl.NumberFormat(LOCALE).format(Number(n) || 0);
+
+async function renderStok() {
+  try {
+    [stockItems, stockMoves] = await Promise.all([dbFetchStockItems(), dbFetchStockMoves()]);
+  } catch (e) {
+    return toast("Stok verileri yüklenemedi: " + (e.message || e), "error");
+  }
+  fillStockSelect();
+  renderStockLevels();
+  renderStockMoves();
+}
+
+function fillStockSelect() {
+  const sel = $("#s-urun");
+  const current = sel.value;
+  sel.innerHTML =
+    '<option value="">Seçin...</option>' +
+    stockItems.map((i) => `<option value="${i.id}">${esc(i.urun_adi)}</option>`).join("") +
+    '<option value="__yeni__">➕ Yeni ürün ekle...</option>';
+  sel.value = current;
+  toggleYeniUrun();
+}
+
+function toggleYeniUrun() {
+  $("#s-yeni-wrap").classList.toggle("hidden", $("#s-urun").value !== "__yeni__");
+}
+
+// Her ürün için toplam giriş/çıkış ve mevcut stok hesabı
+function stockLevels() {
+  const map = {};
+  for (const i of stockItems) map[i.id] = { item: i, giris: 0, cikis: 0 };
+  for (const m of stockMoves) {
+    if (!map[m.item_id]) continue;
+    map[m.item_id][m.tip === "giris" ? "giris" : "cikis"] += Number(m.miktar) || 0;
+  }
+  return Object.values(map);
+}
+
+function renderStockLevels() {
+  const rows = stockLevels();
+  const isAdmin = session.role === "admin";
+  const tbody = $("#stok-tbody");
+
+  if (!rows.length) {
+    tbody.innerHTML =
+      '<tr class="empty-row"><td colspan="5">Henüz stok ürünü yok. Yukarıdaki formdan ilk girişi yapın.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = rows
+    .map(({ item, giris, cikis }) => {
+      const mevcut = giris - cikis;
+      const cls = mevcut > 0 ? "stok-poz" : "stok-neg";
+      return `<tr>
+        <td><b>${esc(item.urun_adi)}</b></td>
+        <td class="num">${fmtMiktar(giris)}</td>
+        <td class="num">${fmtMiktar(cikis)}</td>
+        <td class="num ${cls}">${fmtMiktar(mevcut)}</td>
+        <td class="td-actions">${isAdmin ? `<button class="btn btn-danger btn-sm" data-saction="delitem" data-id="${item.id}">🗑</button>` : ""}</td>
+      </tr>`;
+    })
+    .join("");
+}
+
+function renderStockMoves() {
+  const isAdmin = session.role === "admin";
+  const tbody = $("#stok-moves-tbody");
+
+  if (!stockMoves.length) {
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="7">Henüz hareket yok.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = stockMoves
+    .map((m) => {
+      const tipBadge =
+        m.tip === "giris"
+          ? '<span class="badge badge-odendi">📥 Giriş</span>'
+          : '<span class="badge badge-alinmadi">📤 Çıkış</span>';
+      const urun = m.stock_items ? m.stock_items.urun_adi : "";
+      return `<tr>
+        <td>${fmtTarih(m.tarih)}</td>
+        <td><b>${esc(urun)}</b></td>
+        <td>${tipBadge}</td>
+        <td class="num">${fmtMiktar(m.miktar)}</td>
+        <td>${esc(m.aciklama) || "<span class='muted'>—</span>"}</td>
+        <td>${esc(m.created_by)}</td>
+        <td class="td-actions">${isAdmin ? `<button class="btn btn-danger btn-sm" data-saction="delmove" data-id="${m.id}">🗑</button>` : ""}</td>
+      </tr>`;
+    })
+    .join("");
+}
+
+async function onStockSubmit(e) {
+  e.preventDefault();
+  const selVal = $("#s-urun").value;
+  const tip = $("#s-tip").value;
+  const miktar = parseFloat($("#s-miktar").value);
+  const tarih = $("#s-tarih").value || todayISO();
+  const aciklama = $("#s-aciklama").value.trim();
+
+  if (!selVal) return toast("Ürün seçin.", "error");
+  if (isNaN(miktar) || miktar <= 0) return toast("Miktar 0'dan büyük olmalı.", "error");
+
+  try {
+    let itemId = selVal;
+    if (selVal === "__yeni__") {
+      const ad = $("#s-yeni").value.trim();
+      if (!ad) return toast("Yeni ürünün adını yazın.", "error");
+      const item = await dbAddStockItem(ad, session.username);
+      itemId = item.id;
+    }
+
+    // Çıkışta stok yeterliliği kontrolü
+    if (tip === "cikis") {
+      const lvl = stockLevels().find((r) => r.item.id === itemId);
+      const mevcut = lvl ? lvl.giris - lvl.cikis : 0;
+      if (miktar > mevcut) {
+        return toast(`Stokta yeterli ürün yok. Mevcut: ${fmtMiktar(mevcut)}`, "error");
+      }
+    }
+
+    await dbAddStockMove({ item_id: itemId, tip, miktar, tarih, aciklama }, session.username);
+    $("#form-stok").reset();
+    $("#s-tarih").value = todayISO();
+    toggleYeniUrun();
+    await renderStok();
+    toast(tip === "giris" ? "📥 Giriş kaydedildi." : "📤 Çıkış kaydedildi.");
+  } catch (err) {
+    toast(err.message || "Kaydedilemedi.", "error");
+  }
+}
+
+async function onStockTablesClick(e) {
+  const btn = e.target.closest("button[data-saction]");
+  if (!btn) return;
+  if (session.role !== "admin") return;
+
+  if (btn.dataset.saction === "delmove") {
+    const ok = await confirmDialog("Bu stok hareketi silinecek. Emin misiniz?");
+    if (!ok) return;
+    try {
+      await dbDeleteStockMove(btn.dataset.id);
+      await renderStok();
+      toast("🗑 Hareket silindi.");
+    } catch (err) {
+      toast(err.message || "Silinemedi.", "error");
+    }
+  } else if (btn.dataset.saction === "delitem") {
+    const item = stockItems.find((i) => i.id === btn.dataset.id);
+    const ok = await confirmDialog(
+      `"${item ? item.urun_adi : ""}" ürünü ve TÜM stok hareketleri silinecek. Emin misiniz?`
+    );
+    if (!ok) return;
+    try {
+      await dbDeleteStockItem(btn.dataset.id);
+      await renderStok();
+      toast("🗑 Ürün ve hareketleri silindi.");
+    } catch (err) {
+      toast(err.message || "Silinemedi.", "error");
+    }
+  }
+}
+
+// ============================================================
 // İŞLEM GEÇMİŞİ
 // ============================================================
 
@@ -582,14 +767,15 @@ function renderUsers() {
         ? '<span class="badge badge-odendi">Aktif</span>'
         : '<span class="badge badge-alinmadi">Engelli / Onay bekliyor</span>';
       const isSelf = u.id === session.id;
+      const mailsiz = (u.email || "").endsWith(FAKE_MAIL_DOMAIN);
       return `<tr>
         <td><b>${esc(u.username)}</b>${isSelf ? ' <span class="muted">(siz)</span>' : ""}</td>
-        <td>${esc(u.email)}</td>
+        <td>${mailsiz ? "<span class='muted'>—</span>" : esc(u.email)}</td>
         <td>${roleBadge}</td>
         <td>${durum}</td>
         <td>${fmtZaman(u.created_at)}</td>
         <td class="td-actions">
-          <button class="btn btn-outline btn-sm" data-uaction="resetmail" data-id="${u.id}">📧 Şifre maili</button>
+          ${mailsiz ? "" : `<button class="btn btn-outline btn-sm" data-uaction="resetmail" data-id="${u.id}">📧 Şifre maili</button>`}
           ${
             isSelf
               ? ""
@@ -605,13 +791,25 @@ function renderUsers() {
 
 async function onUserSubmit(e) {
   e.preventDefault();
-  const email = $("#u-email").value.trim();
+  let email = $("#u-email").value.trim();
   const username = $("#u-username").value.trim();
   const password = $("#u-password").value;
   const role = $("#u-role").value;
 
-  if (!email.includes("@")) return toast("Geçerli bir e-posta adresi yazın.", "error");
   if (!username) return toast("Kullanıcı adı boş olamaz.", "error");
+  if (email && !email.includes("@")) return toast("E-posta adresi hatalı görünüyor.", "error");
+
+  // E-posta boş bırakılabilir: kullanıcı adından otomatik bir adres üretilir.
+  // (Bu üyeler "Şifremi unuttum" maili alamaz; şifrelerini admin belirler.)
+  if (!email) {
+    const slug = username
+      .toLowerCase()
+      .replace(/ç/g, "c").replace(/ğ/g, "g").replace(/ı/g, "i")
+      .replace(/ö/g, "o").replace(/ş/g, "s").replace(/ü/g, "u")
+      .replace(/[^a-z0-9]/g, "");
+    if (!slug) return toast("Kullanıcı adında en az bir harf veya rakam olmalı.", "error");
+    email = slug + FAKE_MAIL_DOMAIN;
+  }
   if (password.length < 6) return toast("Şifre en az 6 karakter olmalı.", "error");
   if (password !== $("#u-password2").value) {
     return toast("Şifreler birbirini tutmuyor. İki alana da aynı şifreyi yazın.", "error");
@@ -790,11 +988,19 @@ function wireEvents() {
     }
   });
   $("#btn-logout").addEventListener("click", logout);
-  $("#btn-menu").addEventListener("click", () => $("#sidebar").classList.toggle("open"));
+  $("#btn-menu").addEventListener("click", () =>
+    setSidebar(!$("#sidebar").classList.contains("open"))
+  );
+  $("#sidebar-backdrop").addEventListener("click", () => setSidebar(false));
 
   $$(".nav-link").forEach((link) =>
     link.addEventListener("click", () => showView(link.dataset.view))
   );
+
+  // Stok
+  $("#form-stok").addEventListener("submit", onStockSubmit);
+  $("#s-urun").addEventListener("change", toggleYeniUrun);
+  $("#view-stok").addEventListener("click", onStockTablesClick);
 
   // Yeni kayıt
   $("#form-new").addEventListener("submit", onNewSubmit);

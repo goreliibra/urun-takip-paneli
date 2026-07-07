@@ -132,12 +132,66 @@ async function dbSetApproved(id, approved) {
   if (error) throw error;
 }
 
+// ---------- STOK ----------
+
+async function dbFetchStockItems() {
+  const { data, error } = await sb.from("stock_items").select("*").order("urun_adi");
+  if (error) throw error;
+  return data;
+}
+
+async function dbAddStockItem(urunAdi, username) {
+  const { data, error } = await sb
+    .from("stock_items")
+    .insert({ urun_adi: urunAdi, created_by: username })
+    .select()
+    .single();
+  if (error) {
+    if (error.code === "23505") throw new Error("Bu ürün zaten stok listesinde var.");
+    throw error;
+  }
+  return data;
+}
+
+async function dbDeleteStockItem(id) {
+  const { error } = await sb.from("stock_items").delete().eq("id", id);
+  if (error) throw error;
+}
+
+async function dbFetchStockMoves() {
+  const { data, error } = await sb
+    .from("stock_moves")
+    .select("*, stock_items(urun_adi)")
+    .order("tarih", { ascending: false })
+    .order("created_at", { ascending: false })
+    .limit(500);
+  if (error) throw error;
+  return data;
+}
+
+async function dbAddStockMove(fields, username) {
+  const { error } = await sb.from("stock_moves").insert({ ...fields, created_by: username });
+  if (error) throw error;
+}
+
+async function dbDeleteStockMove(id) {
+  const { error } = await sb.from("stock_moves").delete().eq("id", id);
+  if (error) throw error;
+}
+
 // ---------- CANLI GÜNCELLEME ----------
 
 // Kayıtlar tablosunda herhangi bir değişiklik olduğunda callback çalışır
 function dbSubscribeRecords(callback) {
   sb.channel("records-changes")
     .on("postgres_changes", { event: "*", schema: "public", table: "records" }, callback)
+    .subscribe();
+}
+
+// Stok hareketlerinde değişiklik olduğunda callback çalışır
+function dbSubscribeStock(callback) {
+  sb.channel("stock-changes")
+    .on("postgres_changes", { event: "*", schema: "public", table: "stock_moves" }, callback)
     .subscribe();
 }
 
@@ -242,6 +296,41 @@ if (DEMO_MODE) {
   authLogout = async () => {};
   authSendResetMail = async () => {};
   authSetNewPassword = async () => {};
+
+  // Önizleme: stok verileri
+  let demoStockItems = [
+    { id: "si1", urun_adi: "Döner Bıçağı", created_by: "admin", created_at: nowISO() },
+    { id: "si2", urun_adi: "Ayran Makinesi", created_by: "admin", created_at: nowISO() },
+  ];
+  let demoStockMoves = [
+    { id: "sm1", item_id: "si1", tip: "giris", miktar: 20, tarih: dayISO(-3), aciklama: "Tedarikçiden geldi", created_by: "admin", created_at: nowISO(), stock_items: { urun_adi: "Döner Bıçağı" } },
+    { id: "sm2", item_id: "si1", tip: "cikis", miktar: 5, tarih: dayISO(-1), aciklama: "Satış", created_by: "kullanici", created_at: nowISO(), stock_items: { urun_adi: "Döner Bıçağı" } },
+    { id: "sm3", item_id: "si2", tip: "giris", miktar: 8, tarih: dayISO(0), aciklama: "", created_by: "admin", created_at: nowISO(), stock_items: { urun_adi: "Ayran Makinesi" } },
+  ];
+
+  dbFetchStockItems = async () => [...demoStockItems];
+  dbAddStockItem = async (urunAdi, username) => {
+    if (demoStockItems.some((i) => i.urun_adi === urunAdi)) throw new Error("Bu ürün zaten stok listesinde var.");
+    const it = { id: "si" + Date.now(), urun_adi: urunAdi, created_by: username, created_at: nowISO() };
+    demoStockItems.push(it);
+    return it;
+  };
+  dbDeleteStockItem = async (id) => {
+    demoStockItems = demoStockItems.filter((i) => i.id !== id);
+    demoStockMoves = demoStockMoves.filter((m) => m.item_id !== id);
+  };
+  dbFetchStockMoves = async () => [...demoStockMoves];
+  dbAddStockMove = async (fields, username) => {
+    const item = demoStockItems.find((i) => i.id === fields.item_id);
+    demoStockMoves.unshift({
+      id: "sm" + Date.now(), ...fields, created_by: username, created_at: nowISO(),
+      stock_items: { urun_adi: item ? item.urun_adi : "" },
+    });
+  };
+  dbDeleteStockMove = async (id) => {
+    demoStockMoves = demoStockMoves.filter((m) => m.id !== id);
+  };
+  dbSubscribeStock = () => {};
 
   // Üstte uyarı şeridi göster
   document.addEventListener("DOMContentLoaded", () => {

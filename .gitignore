@@ -1,1 +1,5 @@
 .DS_Store
+KURULUM-SON-ADIM.sql
+
+# Local Netlify folder
+.netlify
