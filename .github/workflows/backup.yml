@@ -1,11 +1,16 @@
-name: Haftalık Veritabanı Yedeği
+name: Otomatik Veritabanı Yedeği
 
 # Bu depo private olduğu için yedekler yalnızca bu depoya erişimi olan
 # kişiler (siz) tarafından görülebilir. Başkası göremez.
+#
+# Her gün için tek bir klasör kullanılır (backups/TARIH/); gün içinde
+# birden çok kez çalıştığında sadece veri gerçekten değiştiyse yeni bir
+# commit oluşur (git diff kontrolü sayesinde). Hiçbir eski yedek SİLİNMEZ,
+# git geçmişinde ve backups/ klasöründe kalıcı olarak birikir.
 
 on:
   schedule:
-    - cron: "0 3 * * 1" # Her Pazartesi 03:00 UTC (TR saatiyle ~06:00)
+    - cron: "*/30 * * * *" # Her 30 dakikada bir kontrol eder
   workflow_dispatch: {} # "Actions" sekmesinden elle de tetiklenebilir
 
 permissions:
@@ -24,7 +29,7 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: |
           set -e
-          STAMP=$(date +%Y-%m-%d)
+          STAMP=$(date -u +%Y-%m-%d)
           DIR="backups/$STAMP"
           mkdir -p "$DIR"
           for TABLE in profiles records history stock_items stock_moves; do
@@ -34,15 +39,10 @@ jobs:
               -o "$DIR/$TABLE.json"
           done
 
-      - name: Eski yedekleri temizle (son 12 haftayı tut)
-        run: |
-          cd backups
-          ls -1d */ 2>/dev/null | sort | head -n -12 | xargs -r rm -rf
-
-      - name: Yedeği depoya kaydet
+      - name: Değişiklik varsa depoya kaydet
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add backups
-          git diff --cached --quiet || git commit -m "Otomatik yedek: $(date +%Y-%m-%d)"
+          git diff --cached --quiet || git commit -m "Otomatik yedek: $(date -u +"%Y-%m-%d %H:%M UTC")"
           git push

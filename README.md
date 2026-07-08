@@ -122,11 +122,13 @@ kayıtların bir Excel kopyasını bilgisayara indirir (`js/app.js` içindeki
 `AUTO_BACKUP_ON_ADD` sabitiyle kapatılabilir). Bu, sadece o anda kaydı ekleyen kişinin
 kendi cihazına iner — merkezi bir yedek değildir.
 
-**2. Merkezi/otomatik yedek (önerilen):** `.github/workflows/backup.yml` her Pazartesi
-Supabase'deki tüm tabloları (`profiles`, `records`, `history`, `stock_items`,
-`stock_moves`) JSON olarak indirip bu depoya (`backups/TARIH/`) kaydeder. **Depo private
-olduğu için bu yedekler yalnızca sizin erişiminiz olan kişiler tarafından görülebilir.**
-Kurulum (bir kez):
+**2. Merkezi/otomatik yedek (önerilen):** `.github/workflows/backup.yml` **her 30 dakikada
+bir** Supabase'deki tüm tabloları (`profiles`, `records`, `history`, `stock_items`,
+`stock_moves`) JSON olarak indirip bu depoya (`backups/TARIH/`) kaydeder. Veri gerçekten
+değişmediyse yeni bir kayıt (commit) oluşturmaz, yer kaplamaz. **Hiçbir eski yedek silinmez
+— kalıcı olarak birikir**, git geçmişinin tamamı da ayrıca tarihli bir değişiklik kaydı
+gibi işlev görür. **Depo private olduğu için bu yedekler yalnızca sizin erişiminiz olan
+kişiler tarafından görülebilir.** Kurulum (bir kez):
 
 1. Supabase panelinde **Project Settings → API → Project API keys → service_role**
    anahtarını kopyalayın (bu anahtar RLS'i atlar, çok güçlüdür — asla paylaşmayın/kod
