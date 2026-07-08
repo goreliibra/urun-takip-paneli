@@ -328,25 +328,35 @@ async function onNewSubmit(e) {
   const { fields, error } = collectForm("n");
   if (error) return toast(error, "error");
 
+  // ÖNEMLİ: indirme, düğmeye tıklamanın hemen ardından (sunucu cevabını beklemeden)
+  // tetikleniyor. Çünkü başta "await" ile sunucuya gidip dönene kadar bekleseydik,
+  // özellikle iPhone/Safari gibi mobil tarayıcılar "kullanıcı tıklamasından çok sonra
+  // geldi" diyerek indirmeyi sessizce engelliyor (hata bile vermiyor). Bu yüzden
+  // henüz sunucuya kaydedilmemiş olsa da, elimizdeki güncel veriyle hemen indiriyoruz.
+  if (AUTO_BACKUP_ON_ADD) {
+    autoBackupSnapshot([...records, { ...fields, created_by: session.username }]);
+  }
+
   try {
     await dbAddRecord(fields, session.username);
     $("#form-new").reset();
     $("#n-tarih").value = todayISO();
     await loadRecords();
     renderCurrentView();
-    if (AUTO_BACKUP_ON_ADD) autoBackupSnapshot();
     toast("✅ Kayıt başarıyla eklendi." + (AUTO_BACKUP_ON_ADD ? " 💾 Yedek indirildi." : ""));
   } catch (err) {
     toast("Kayıt eklenemedi: " + (err.message || err), "error");
   }
 }
 
-// Filtreden bağımsız, TÜM kayıtların anlık Excel yedeğini bilgisayara indirir.
-// Sunucu tarafı yedekleme kurulana kadar geçici bir güvence katmanıdır.
-function autoBackupSnapshot() {
-  if (typeof XLSX === "undefined" || !records.length) return;
+// Filtreden bağımsız, verilen (varsayılan: TÜM) kayıtların anlık Excel yedeğini
+// bilgisayara indirir. Sunucu tarafı yedekleme kurulana kadar geçici bir güvence
+// katmanıdır.
+function autoBackupSnapshot(rows_) {
+  const source = rows_ || records;
+  if (typeof XLSX === "undefined" || !source.length) return;
   try {
-    const rows = records.map((r) => ({
+    const rows = source.map((r) => ({
       Tarih: fmtTarih(r.tarih),
       "Ürün Adı": r.urun_adi,
       "Müşteri Adı": r.musteri_adi || "",
@@ -362,8 +372,8 @@ function autoBackupSnapshot() {
     XLSX.utils.book_append_sheet(wb, ws, "Kayıtlar");
     const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
     XLSX.writeFile(wb, `yedek-urun-takip-${stamp}.xlsx`);
-  } catch {
-    // Yedek indirilemese bile ana kayıt işlemi etkilenmesin.
+  } catch (err) {
+    console.error("Otomatik yedek indirilemedi:", err);
   }
 }
 
