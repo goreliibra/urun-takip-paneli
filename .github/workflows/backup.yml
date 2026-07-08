@@ -1,0 +1,48 @@
+name: Haftalık Veritabanı Yedeği
+
+# Bu depo private olduğu için yedekler yalnızca bu depoya erişimi olan
+# kişiler (siz) tarafından görülebilir. Başkası göremez.
+
+on:
+  schedule:
+    - cron: "0 3 * * 1" # Her Pazartesi 03:00 UTC (TR saatiyle ~06:00)
+  workflow_dispatch: {} # "Actions" sekmesinden elle de tetiklenebilir
+
+permissions:
+  contents: write
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Depoyu al
+        uses: actions/checkout@v4
+
+      - name: Supabase'den tüm tabloları indir
+        env:
+          SUPABASE_URL: https://oenfuqkakqfpfxptbsgz.supabase.co
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          set -e
+          STAMP=$(date +%Y-%m-%d)
+          DIR="backups/$STAMP"
+          mkdir -p "$DIR"
+          for TABLE in profiles records history stock_items stock_moves; do
+            curl -sf "$SUPABASE_URL/rest/v1/$TABLE?select=*" \
+              -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
+              -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
+              -o "$DIR/$TABLE.json"
+          done
+
+      - name: Eski yedekleri temizle (son 12 haftayı tut)
+        run: |
+          cd backups
+          ls -1d */ 2>/dev/null | sort | head -n -12 | xargs -r rm -rf
+
+      - name: Yedeği depoya kaydet
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add backups
+          git diff --cached --quiet || git commit -m "Otomatik yedek: $(date +%Y-%m-%d)"
+          git push

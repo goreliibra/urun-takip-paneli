@@ -115,6 +115,27 @@ girebilir (e-posta girmelerine gerek yok). Bunun çalışması için `db/upgrade
 dosyasını bir kez SQL Editor'de çalıştırmanız gerekir (mevcut veriye dokunmaz, sadece
 kullanıcı adını arka plandaki e-postaya çeviren küçük bir fonksiyon ekler).
 
+## Yedekleme
+
+**1. Anlık/yerel yedek:** Her yeni kayıt eklendiğinde tarayıcı otomatik olarak tüm
+kayıtların bir Excel kopyasını bilgisayara indirir (`js/app.js` içindeki
+`AUTO_BACKUP_ON_ADD` sabitiyle kapatılabilir). Bu, sadece o anda kaydı ekleyen kişinin
+kendi cihazına iner — merkezi bir yedek değildir.
+
+**2. Merkezi/otomatik yedek (önerilen):** `.github/workflows/backup.yml` her Pazartesi
+Supabase'deki tüm tabloları (`profiles`, `records`, `history`, `stock_items`,
+`stock_moves`) JSON olarak indirip bu depoya (`backups/TARIH/`) kaydeder. **Depo private
+olduğu için bu yedekler yalnızca sizin erişiminiz olan kişiler tarafından görülebilir.**
+Kurulum (bir kez):
+
+1. Supabase panelinde **Project Settings → API → Project API keys → service_role**
+   anahtarını kopyalayın (bu anahtar RLS'i atlar, çok güçlüdür — asla paylaşmayın/kod
+   içine yazmayın).
+2. GitHub'da bu depo → **Settings → Secrets and variables → Actions → New repository
+   secret** → İsim: `SUPABASE_SERVICE_ROLE_KEY`, Değer: kopyaladığınız anahtar.
+3. İsterseniz hemen test etmek için **Actions** sekmesi → "Haftalık Veritabanı Yedeği" →
+   **Run workflow** ile elle bir kez çalıştırabilirsiniz.
+
 ## Dosya Yapısı
 
 ```
