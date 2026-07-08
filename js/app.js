@@ -106,6 +106,10 @@ let pollTimer = null;
 // E-postasız eklenen üyeler için otomatik üretilen adres uzantısı
 const FAKE_MAIL_DOMAIN = "@uye.uruntakip-paneli.com";
 
+// Her yeni kayıt eklendiğinde bilgisayara otomatik Excel yedeği indirilsin mi?
+// (Sunucu tarafında düzenli yedekleme kurulunca burayı false yapabilirsiniz.)
+const AUTO_BACKUP_ON_ADD = true;
+
 // ============================================================
 // BAŞLANGIÇ
 // ============================================================
@@ -330,9 +334,36 @@ async function onNewSubmit(e) {
     $("#n-tarih").value = todayISO();
     await loadRecords();
     renderCurrentView();
-    toast("✅ Kayıt başarıyla eklendi.");
+    if (AUTO_BACKUP_ON_ADD) autoBackupSnapshot();
+    toast("✅ Kayıt başarıyla eklendi." + (AUTO_BACKUP_ON_ADD ? " 💾 Yedek indirildi." : ""));
   } catch (err) {
     toast("Kayıt eklenemedi: " + (err.message || err), "error");
+  }
+}
+
+// Filtreden bağımsız, TÜM kayıtların anlık Excel yedeğini bilgisayara indirir.
+// Sunucu tarafı yedekleme kurulana kadar geçici bir güvence katmanıdır.
+function autoBackupSnapshot() {
+  if (typeof XLSX === "undefined" || !records.length) return;
+  try {
+    const rows = records.map((r) => ({
+      Tarih: fmtTarih(r.tarih),
+      "Ürün Adı": r.urun_adi,
+      "Müşteri Adı": r.musteri_adi || "",
+      "Ürün Fiyatı": Number(r.urun_fiyati),
+      "Alınan Para": Number(r.alinan_para),
+      "Kalan Para": Number(r.kalan_para),
+      "Ödeme Durumu": STATUS_TEXT[statusOf(r)],
+      Açıklama: r.aciklama || "",
+      Ekleyen: r.created_by,
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Kayıtlar");
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+    XLSX.writeFile(wb, `yedek-urun-takip-${stamp}.xlsx`);
+  } catch {
+    // Yedek indirilemese bile ana kayıt işlemi etkilenmesin.
   }
 }
 
