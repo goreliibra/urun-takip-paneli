@@ -153,6 +153,7 @@
               <button id="btn-refresh" class="btn btn-outline btn-sm">🔄 Yenile</button>
               <button id="btn-export-csv" class="btn btn-outline btn-sm">⬇ CSV</button>
               <button id="btn-export-xlsx" class="btn btn-outline btn-sm">⬇ Excel</button>
+              <button id="btn-export-pdf" class="btn btn-outline btn-sm">⬇ PDF</button>
             </div>
           </div>
 
@@ -395,6 +396,29 @@
     </div>
   </div>
 
+  <!-- ============ KULLANICI DÜZENLEME PENCERESİ ============ -->
+  <div id="modal-edit-user" class="modal-overlay hidden">
+    <div class="modal modal-sm">
+      <h3>Kullanıcıyı Düzenle</h3>
+      <div class="form-field">
+        <label for="eu-username">Kullanıcı Adı *</label>
+        <input type="text" id="eu-username" required />
+      </div>
+      <div class="form-field">
+        <label for="eu-role">Rol</label>
+        <select id="eu-role">
+          <option value="kullanici">Kullanıcı</option>
+          <option value="admin">Admin</option>
+        </select>
+      </div>
+      <p class="muted">Şifre burada değiştirilemez (e-postalı üyeler "Şifre maili" ile kendileri yenileyebilir).</p>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-outline" id="btn-edit-user-cancel">Vazgeç</button>
+        <button type="button" class="btn btn-primary" id="btn-edit-user-save">💾 Kaydet</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ============ ONAY PENCERESİ ============ -->
   <div id="modal-confirm" class="modal-overlay hidden">
     <div class="modal modal-sm">
@@ -443,6 +467,8 @@
   <!-- Kütüphaneler -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.4/dist/jspdf.plugin.autotable.min.js"></script>
 
   <!-- Uygulama -->
   <script src="js/config.js"></script>

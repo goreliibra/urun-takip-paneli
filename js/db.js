@@ -126,9 +126,30 @@ async function dbAddUser(email, password, username, role) {
   if (e2) throw e2;
 }
 
-// Üye girişini aç/kapat (kalıcı silme Supabase panelinden: Authentication > Users)
+// Üye girişini aç/kapat
 async function dbSetApproved(id, approved) {
   const { error } = await sb.from("profiles").update({ approved }).eq("id", id);
+  if (error) throw error;
+}
+
+// Kullanıcı adı / rol düzeltme (şifre burada değişmez — sadece kişinin kendisi
+// "Şifremi unuttum" ile ya da admin yeni bir üye olarak ekleyerek değiştirebilir)
+async function dbUpdateUser(id, { username, role }) {
+  const { data: existing } = await sb
+    .from("profiles")
+    .select("id")
+    .ilike("username", username)
+    .neq("id", id)
+    .maybeSingle();
+  if (existing) throw new Error("Bu kullanıcı adı zaten mevcut.");
+
+  const { error } = await sb.from("profiles").update({ username, role }).eq("id", id);
+  if (error) throw error;
+}
+
+// Üyeyi kalıcı olarak siler (profil silinir, girişi tamamen keser).
+async function dbDeleteUser(id) {
+  const { error } = await sb.from("profiles").delete().eq("id", id);
   if (error) throw error;
 }
 

@@ -101,6 +101,7 @@ let stockItems = [];
 let stockMoves = [];
 let currentView = "dashboard";
 let editingRecord = null;
+let editingUser = null;
 let pollTimer = null;
 
 // E-postasız eklenen üyeler için otomatik üretilen adres uzantısı
@@ -817,6 +818,7 @@ function renderUsers() {
         <td>${fmtZaman(u.created_at)}</td>
         <td class="td-actions">
           ${mailsiz ? "" : `<button class="btn btn-outline btn-sm" data-uaction="resetmail" data-id="${u.id}">📧 Şifre maili</button>`}
+          <button class="btn btn-outline btn-sm" data-uaction="edit" data-id="${u.id}">✏️ Düzenle</button>
           ${
             isSelf
               ? ""
@@ -824,6 +826,7 @@ function renderUsers() {
                 ? `<button class="btn btn-danger btn-sm" data-uaction="block" data-id="${u.id}">⛔ Engelle</button>`
                 : `<button class="btn btn-primary btn-sm" data-uaction="approve" data-id="${u.id}">✅ Onayla</button>`
           }
+          ${isSelf ? "" : `<button class="btn btn-danger btn-sm" data-uaction="delete" data-id="${u.id}">🗑 Sil</button>`}
         </td>
       </tr>`;
     })
@@ -908,6 +911,62 @@ async function onUsersTableClick(e) {
     } catch (err) {
       toast("İşlem yapılamadı: " + (err.message || err), "error");
     }
+  } else if (btn.dataset.uaction === "edit") {
+    openEditUser(user);
+  } else if (btn.dataset.uaction === "delete") {
+    // Son aktif admin silinmesin, sistem kilitlenmesin
+    const adminCount = usersList.filter((u) => u.role === "admin" && u.approved).length;
+    if (user.role === "admin" && adminCount <= 1) {
+      return toast("Son aktif admin silinemez.", "error");
+    }
+    const ok = await confirmDialog(
+      `"${user.username}" kalıcı olarak silinecek, bir daha giriş yapamayacak. Emin misiniz?`,
+      "Evet, Sil"
+    );
+    if (!ok) return;
+    try {
+      await dbDeleteUser(user.id);
+      await loadUsers();
+      renderUsers();
+      toast(`🗑 "${user.username}" silindi.`);
+    } catch (err) {
+      toast("Silinemedi: " + (err.message || err), "error");
+    }
+  }
+}
+
+function openEditUser(user) {
+  editingUser = user;
+  $("#eu-username").value = user.username;
+  $("#eu-role").value = user.role;
+  $("#modal-edit-user").classList.remove("hidden");
+}
+
+function closeEditUser() {
+  editingUser = null;
+  $("#modal-edit-user").classList.add("hidden");
+}
+
+async function onEditUserSave() {
+  if (!editingUser) return;
+  const username = $("#eu-username").value.trim();
+  const role = $("#eu-role").value;
+  if (!username) return toast("Kullanıcı adı boş olamaz.", "error");
+
+  // Son aktif admin, admin olmayan bir role düşürülmesin
+  if (editingUser.role === "admin" && role !== "admin") {
+    const adminCount = usersList.filter((u) => u.role === "admin" && u.approved).length;
+    if (adminCount <= 1) return toast("Son aktif admin'in rolü değiştirilemez.", "error");
+  }
+
+  try {
+    await dbUpdateUser(editingUser.id, { username, role });
+    closeEditUser();
+    await loadUsers();
+    renderUsers();
+    toast(`✅ "${username}" güncellendi.`);
+  } catch (err) {
+    toast(err.message || "Güncellenemedi.", "error");
   }
 }
 
@@ -958,6 +1017,37 @@ function exportExcel() {
   XLSX.utils.book_append_sheet(wb, ws, "Kayıtlar");
   XLSX.writeFile(wb, `urun-takip-${todayISO()}.xlsx`);
   toast("⬇ Excel dosyası indirildi.");
+}
+
+function exportPDF() {
+  if (typeof window.jspdf === "undefined") {
+    return toast("PDF kütüphanesi yüklenemedi, CSV/Excel kullanın.", "error");
+  }
+  const rows = exportRows();
+  if (!rows.length) return toast("Aktarılacak kayıt yok.", "error");
+
+  const MONEY_COLS = ["Ürün Fiyatı", "Alınan Para", "Kalan Para"];
+  const headers = Object.keys(rows[0]);
+  const body = rows.map((r) =>
+    headers.map((h) => (MONEY_COLS.includes(h) ? fmtPara(r[h]) : String(r[h] ?? "")))
+  );
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: "landscape" });
+  doc.setFontSize(14);
+  doc.text("Ürün Takip Paneli - Kayıt Listesi", 14, 15);
+  doc.setFontSize(9);
+  doc.text(new Date().toLocaleString(LOCALE), 14, 21);
+  doc.autoTable({
+    head: [headers],
+    body,
+    startY: 26,
+    styles: { fontSize: 8 },
+    headStyles: { fillColor: [30, 58, 95] },
+  });
+
+  doc.save(`urun-takip-${todayISO()}.pdf`);
+  toast("⬇ PDF dosyası indirildi.");
 }
 
 function downloadBlob(blob, filename) {
@@ -1069,6 +1159,7 @@ function wireEvents() {
   });
   $("#btn-export-csv").addEventListener("click", exportCSV);
   $("#btn-export-xlsx").addEventListener("click", exportExcel);
+  $("#btn-export-pdf").addEventListener("click", exportPDF);
 
   // Düzenleme
   $("#form-edit").addEventListener("submit", onEditSubmit);
@@ -1096,4 +1187,6 @@ function wireEvents() {
   // Kullanıcı yönetimi
   $("#form-user").addEventListener("submit", onUserSubmit);
   $("#users-tbody").addEventListener("click", onUsersTableClick);
+  $("#btn-edit-user-save").addEventListener("click", onEditUserSave);
+  $("#btn-edit-user-cancel").addEventListener("click", closeEditUser);
 }

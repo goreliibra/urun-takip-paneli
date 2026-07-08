@@ -16,7 +16,8 @@ ortak veritabanını görür, bir kişi kayıt eklediğinde diğerlerinde otomat
 - 🗑 Silme: sadece admin, onay sorusu ile
 - 🕓 İşlem geçmişi: hem genel sayfa hem kayıt bazında
 - 🔄 Canlı güncelleme: Supabase Realtime + 30 sn'de bir yedek yenileme
-- ⬇ CSV ve Excel (xlsx) dışa aktarma (aktif filtreye göre)
+- ⬇ CSV, Excel (xlsx) ve PDF dışa aktarma (aktif filtreye göre)
+- 👤 Kullanıcı Yönetimi: üye ekle, kullanıcı adı/rol düzelt, engelle/onayla, kalıcı sil
 - 📱 Mobil uyumlu, sade koyu mavi/beyaz tasarım
 
 ## Teknoloji
@@ -114,6 +115,14 @@ E-postasız eklenen üyeler artık giriş ekranına kendi **kullanıcı adların
 girebilir (e-posta girmelerine gerek yok). Bunun çalışması için `db/upgrade-username-login.sql`
 dosyasını bir kez SQL Editor'de çalıştırmanız gerekir (mevcut veriye dokunmaz, sadece
 kullanıcı adını arka plandaki e-postaya çeviren küçük bir fonksiyon ekler).
+
+### Kullanıcı düzenleme / silme
+
+Kullanıcı Yönetimi sayfasında artık her üye için **✏️ Düzenle** (kullanıcı adı/rol
+düzeltme) ve **🗑 Sil** (kalıcı silme) butonları var. Düzeltme zaten çalışır durumda;
+**silme** için `db/upgrade-user-delete.sql` dosyasını bir kez SQL Editor'de çalıştırmanız
+gerekir (eksik olan silme yetkisini ekler). Son aktif admin silinemez/rolü düşürülemez —
+sistem kilitlenmesin diye.
 
 ## Yedekleme
 
