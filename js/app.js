@@ -625,7 +625,7 @@ function renderStockMoves() {
   const tbody = $("#stok-moves-tbody");
 
   if (!stockMoves.length) {
-    tbody.innerHTML = '<tr class="empty-row"><td colspan="7">Henüz hareket yok.</td></tr>';
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="9">Henüz hareket yok.</td></tr>';
     return;
   }
 
@@ -636,11 +636,15 @@ function renderStockMoves() {
           ? '<span class="badge badge-odendi">📥 Giriş</span>'
           : '<span class="badge badge-alinmadi">📤 Çıkış</span>';
       const urun = m.stock_items ? m.stock_items.urun_adi : "";
+      const birimFiyat = m.birim_fiyat != null ? fmtPara(m.birim_fiyat) : "<span class='muted'>—</span>";
+      const tutar = m.birim_fiyat != null ? fmtPara(Number(m.birim_fiyat) * Number(m.miktar)) : "<span class='muted'>—</span>";
       return `<tr>
         <td>${fmtTarih(m.tarih)}</td>
         <td><b>${esc(urun)}</b></td>
         <td>${tipBadge}</td>
         <td class="num">${fmtMiktar(m.miktar)}</td>
+        <td class="num">${birimFiyat}</td>
+        <td class="num">${tutar}</td>
         <td>${esc(m.aciklama) || "<span class='muted'>—</span>"}</td>
         <td>${esc(m.created_by)}</td>
         <td class="td-actions">${isAdmin ? `<button class="btn btn-danger btn-sm" data-saction="delmove" data-id="${m.id}">🗑</button>` : ""}</td>
@@ -654,11 +658,19 @@ async function onStockSubmit(e) {
   const selVal = $("#s-urun").value;
   const tip = $("#s-tip").value;
   const miktar = parseFloat($("#s-miktar").value);
+  const fiyatStr = $("#s-fiyat").value.trim();
   const tarih = $("#s-tarih").value || todayISO();
   const aciklama = $("#s-aciklama").value.trim();
 
   if (!selVal) return toast("Ürün seçin.", "error");
   if (isNaN(miktar) || miktar <= 0) return toast("Miktar 0'dan büyük olmalı.", "error");
+
+  // Birim fiyat tamamen isteğe bağlı; girilirse negatif olamaz.
+  let birimFiyat = null;
+  if (fiyatStr !== "") {
+    birimFiyat = parseFloat(fiyatStr);
+    if (isNaN(birimFiyat) || birimFiyat < 0) return toast("Birim fiyat negatif olamaz.", "error");
+  }
 
   try {
     let itemId = selVal;
@@ -678,7 +690,10 @@ async function onStockSubmit(e) {
       }
     }
 
-    await dbAddStockMove({ item_id: itemId, tip, miktar, tarih, aciklama }, session.username);
+    await dbAddStockMove(
+      { item_id: itemId, tip, miktar, birim_fiyat: birimFiyat, tarih, aciklama },
+      session.username
+    );
     $("#form-stok").reset();
     $("#s-tarih").value = todayISO();
     toggleYeniUrun();

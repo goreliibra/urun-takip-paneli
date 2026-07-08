@@ -18,6 +18,8 @@ ortak veritabanını görür, bir kişi kayıt eklediğinde diğerlerinde otomat
 - 🔄 Canlı güncelleme: Supabase Realtime + 30 sn'de bir yedek yenileme
 - ⬇ CSV, Excel (xlsx) ve PDF dışa aktarma (aktif filtreye göre)
 - 👤 Kullanıcı Yönetimi: üye ekle, kullanıcı adı/rol düzelt, engelle/onayla, kalıcı sil
+- 📦 Stok Takibi: giriş/çıkışlarda **isteğe bağlı birim fiyat** — ne kadara alındığı/satıldığı
+  ve toplam tutar otomatik hesaplanıp gösterilir
 - 📱 Mobil uyumlu, sade koyu mavi/beyaz tasarım
 
 ## Teknoloji
@@ -123,6 +125,14 @@ düzeltme) ve **🗑 Sil** (kalıcı silme) butonları var. Düzeltme zaten çal
 **silme** için `db/upgrade-user-delete.sql` dosyasını bir kez SQL Editor'de çalıştırmanız
 gerekir (eksik olan silme yetkisini ekler). Son aktif admin silinemez/rolü düşürülemez —
 sistem kilitlenmesin diye.
+
+### Stok hareketlerinde birim fiyat
+
+Stok girişi/çıkışı yaparken artık isteğe bağlı bir **"Birim Fiyat"** alanı da var (ör.
+500 adet, birim fiyatı 6 €) — boş bırakılabilir, zorunlu değildir. Girilirse "Son
+Hareketler" tablosunda birim fiyat ve toplam tutar (miktar × birim fiyat) otomatik
+gösterilir. Bunun çalışması için `db/upgrade-stok-fiyat.sql` dosyasını bir kez SQL
+Editor'de çalıştırmanız gerekir (yeni, isteğe bağlı bir sütun ekler).
 
 ## Yedekleme
 
