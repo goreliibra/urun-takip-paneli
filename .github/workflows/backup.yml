@@ -10,7 +10,7 @@ name: Otomatik Veritabanı Yedeği
 
 on:
   schedule:
-    - cron: "*/30 * * * *" # Her 30 dakikada bir kontrol eder
+    - cron: "*/5 * * * *" # Her 5 dakikada bir kontrol eder
   workflow_dispatch: {} # "Actions" sekmesinden elle de tetiklenebilir
 
 permissions:
