@@ -68,6 +68,7 @@
         <button class="nav-link" data-view="new">➕ Yeni Kayıt</button>
         <button class="nav-link" data-view="records">📋 Kayıt Listesi</button>
         <button class="nav-link" data-view="stok">📦 Stok</button>
+        <button class="nav-link" data-view="firmalar">🏢 Firmalar</button>
         <button class="nav-link" data-view="history">🕓 İşlem Geçmişi</button>
         <button class="nav-link hidden" data-view="users" id="nav-users">👥 Kullanıcılar</button>
       </nav>
@@ -111,6 +112,17 @@
           <div class="card form-card">
             <form id="form-new" autocomplete="off">
               <div class="form-grid">
+                <div class="form-field">
+                  <label for="n-firma">Firma</label>
+                  <select id="n-firma">
+                    <option value="">— Firma seçilmedi —</option>
+                    <option value="__yeni__">➕ Yeni firma ekle...</option>
+                  </select>
+                </div>
+                <div class="form-field hidden" id="n-firma-yeni-wrap">
+                  <label for="n-firma-yeni">Yeni Firma Adı *</label>
+                  <input type="text" id="n-firma-yeni" placeholder="Örn: Yılmaz Gıda Ltd." />
+                </div>
                 <div class="form-field">
                   <label for="n-urun">Ürün Adı *</label>
                   <input type="text" id="n-urun" required placeholder="Örn: Döner Ocağı" />
@@ -158,7 +170,7 @@
           </div>
 
           <div class="card filter-bar">
-            <input type="text" id="f-search" placeholder="🔍 Ürün, müşteri veya açıklama ara..." />
+            <input type="text" id="f-search" placeholder="🔍 Firma, ürün, müşteri veya açıklama ara..." />
             <div class="filter-row">
               <div class="filter-field">
                 <label>Başlangıç</label>
@@ -167,6 +179,12 @@
               <div class="filter-field">
                 <label>Bitiş</label>
                 <input type="date" id="f-date-to" />
+              </div>
+              <div class="filter-field">
+                <label>Firma</label>
+                <select id="f-firma">
+                  <option value="">Tümü</option>
+                </select>
               </div>
               <div class="filter-field">
                 <label>Ödeme Durumu</label>
@@ -194,6 +212,7 @@
               <thead>
                 <tr>
                   <th>Tarih</th>
+                  <th>Firma</th>
                   <th>Ürün Adı</th>
                   <th>Müşteri</th>
                   <th class="num">Fiyat</th>
@@ -294,6 +313,44 @@
           </div>
         </section>
 
+        <!-- ==== FİRMALAR ==== -->
+        <section id="view-firmalar" class="view hidden">
+          <h2>Firmalar</h2>
+
+          <div class="card form-card">
+            <h3>Yeni Firma Ekle</h3>
+            <form id="form-firma" autocomplete="off">
+              <div class="form-grid">
+                <div class="form-field">
+                  <label for="fi-ad">Firma Adı *</label>
+                  <input type="text" id="fi-ad" required placeholder="Örn: Yılmaz Gıda Ltd." />
+                </div>
+              </div>
+              <button type="submit" class="btn btn-primary">➕ Firma Ekle</button>
+              <p class="muted">Buraya eklediğiniz firmalar "Yeni Kayıt" ve "Düzenle" formlarındaki <b>Firma</b> listesinde çıkar; her kayıt bir firmaya bağlanabilir (zorunlu değil).</p>
+            </form>
+          </div>
+
+          <h3 class="section-title">Firma Listesi</h3>
+          <p class="muted" id="firmalar-count"></p>
+          <div class="table-wrap card">
+            <table>
+              <thead>
+                <tr>
+                  <th>Firma Adı</th>
+                  <th class="num">Kayıt</th>
+                  <th class="num">Toplam Fiyat</th>
+                  <th class="num">Alınan</th>
+                  <th class="num">Kalan</th>
+                  <th>Ekleyen</th>
+                  <th>İşlem</th>
+                </tr>
+              </thead>
+              <tbody id="firmalar-tbody"></tbody>
+            </table>
+          </div>
+        </section>
+
         <!-- ==== İŞLEM GEÇMİŞİ ==== -->
         <section id="view-history" class="view hidden">
           <h2>İşlem Geçmişi</h2>
@@ -366,6 +423,17 @@
       <form id="form-edit" autocomplete="off">
         <div class="form-grid">
           <div class="form-field">
+            <label for="e-firma">Firma</label>
+            <select id="e-firma">
+              <option value="">— Firma seçilmedi —</option>
+              <option value="__yeni__">➕ Yeni firma ekle...</option>
+            </select>
+          </div>
+          <div class="form-field hidden" id="e-firma-yeni-wrap">
+            <label for="e-firma-yeni">Yeni Firma Adı *</label>
+            <input type="text" id="e-firma-yeni" placeholder="Firma adı" />
+          </div>
+          <div class="form-field">
             <label for="e-urun">Ürün Adı *</label>
             <input type="text" id="e-urun" required />
           </div>
@@ -421,6 +489,22 @@
       <div class="modal-actions">
         <button type="button" class="btn btn-outline" id="btn-edit-user-cancel">Vazgeç</button>
         <button type="button" class="btn btn-primary" id="btn-edit-user-save">💾 Kaydet</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ FİRMA DÜZENLEME PENCERESİ ============ -->
+  <div id="modal-edit-firma" class="modal-overlay hidden">
+    <div class="modal modal-sm">
+      <h3>Firmayı Düzenle</h3>
+      <div class="form-field">
+        <label for="ef-ad">Firma Adı *</label>
+        <input type="text" id="ef-ad" required />
+      </div>
+      <p class="muted">Adı değiştirdiğinizde bu firmaya bağlı tüm kayıtlarda yeni ad görünür.</p>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-outline" id="btn-edit-firma-cancel">Vazgeç</button>
+        <button type="button" class="btn btn-primary" id="btn-edit-firma-save">💾 Kaydet</button>
       </div>
     </div>
   </div>

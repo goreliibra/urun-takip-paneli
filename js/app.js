@@ -20,6 +20,7 @@ const fmtTarih = (d) => (d ? new Date(d + "T00:00:00").toLocaleDateString("tr-TR
 const fmtZaman = (ts) => (ts ? new Date(ts).toLocaleString("tr-TR") : "");
 
 const FIELD_LABELS = {
+  firma_id: "Firma",
   urun_adi: "Ürün adı",
   musteri_adi: "Müşteri adı",
   urun_fiyati: "Ürün fiyatı",
@@ -40,6 +41,14 @@ function statusOf(r) {
   if (kalan <= 0) return "odendi";
   if (alinan <= 0) return "alinmadi";
   return "borc";
+}
+
+// Kayıtta yalnızca firma kimliği (firma_id) tutulur; adı firma listesinden okunur.
+// Böylece firma adı değiştirilince tüm kayıtlarda yeni ad görünür.
+function companyName(id) {
+  if (!id) return "";
+  const c = companies.find((x) => x.id === id);
+  return c ? c.firma_adi : "";
 }
 
 function todayISO() {
@@ -97,11 +106,14 @@ function closePassword(result) {
 let session = null; // { id, username, role, email }
 let records = [];
 let usersList = [];
+let companies = [];
+let companiesReady = false; // firma tablosu veritabanında var mı? (SQL çalıştırıldı mı)
 let stockItems = [];
 let stockMoves = [];
 let currentView = "dashboard";
 let editingRecord = null;
 let editingUser = null;
+let editingCompany = null;
 let pollTimer = null;
 
 // E-postasız eklenen üyeler için otomatik üretilen adres uzantısı
@@ -183,6 +195,11 @@ async function enterApp() {
   dbSubscribeStock(() => {
     if (currentView === "stok") renderStok();
   });
+  dbSubscribeCompanies(async () => {
+    await loadCompanies();
+    if (currentView === "firmalar") renderFirmaTable();
+    else if (currentView === "records") renderRecords();
+  });
 
   // Yedek: belirli aralıklarla ve sekme öne gelince yenile
   clearInterval(pollTimer);
@@ -203,7 +220,7 @@ async function refreshData() {
 
 async function loadAll() {
   try {
-    await Promise.all([loadRecords(), loadUsers()]);
+    await Promise.all([loadRecords(), loadUsers(), loadCompanies()]);
   } catch (e) {
     toast("Veriler yüklenemedi: " + (e.message || e), "error");
   }
@@ -216,6 +233,23 @@ async function loadRecords() {
 async function loadUsers() {
   usersList = await dbFetchUsers();
   fillUserFilter();
+}
+
+// Firma listesi. Veritabanında "companies" tablosu yoksa (db/upgrade-firmalar.sql
+// henüz çalıştırılmadıysa) uygulamanın kalanı çalışmaya devam eder; Firmalar
+// sayfasında ne yapılması gerektiği yazar.
+async function loadCompanies() {
+  try {
+    companies = await dbFetchCompanies();
+    companiesReady = true;
+  } catch (e) {
+    companies = [];
+    companiesReady = false;
+    console.warn("Firma listesi yüklenemedi:", e.message || e);
+  }
+  fillCompanySelect("n");
+  fillCompanySelect("e");
+  fillFirmaFilter();
 }
 
 // ============================================================
@@ -247,6 +281,7 @@ function renderCurrentView() {
   if (currentView === "dashboard") renderDashboard();
   else if (currentView === "records") renderRecords();
   else if (currentView === "stok") renderStok();
+  else if (currentView === "firmalar") renderFirmalar();
   else if (currentView === "history") renderHistoryPage();
   else if (currentView === "users") renderUsers();
 }
@@ -290,8 +325,46 @@ function attachAutoKalan(prefix) {
   $(`#${prefix}-alinan`).addEventListener("input", recalc);
 }
 
+// Form ve filtrelerdeki firma listesini doldurur (seçili değer korunur)
+function fillCompanySelect(prefix) {
+  const sel = $(`#${prefix}-firma`);
+  if (!sel) return;
+  const current = sel.value;
+  sel.innerHTML =
+    '<option value="">— Firma seçilmedi —</option>' +
+    companies.map((c) => `<option value="${esc(c.id)}">${esc(c.firma_adi)}</option>`).join("") +
+    '<option value="__yeni__">➕ Yeni firma ekle...</option>';
+  sel.value = current;
+  toggleNewCompany(prefix);
+}
+
+// "Yeni firma ekle..." seçilince yanındaki ad kutusu görünür olur
+function toggleNewCompany(prefix) {
+  const wrap = $(`#${prefix}-firma-yeni-wrap`);
+  const sel = $(`#${prefix}-firma`);
+  if (wrap && sel) wrap.classList.toggle("hidden", sel.value !== "__yeni__");
+}
+
+// Formda seçilen firmanın kimliğini döndürür. "Yeni firma ekle..." seçilmişse
+// firmayı önce oluşturur (aynı isim varsa onu kullanır, kopya oluşmaz).
+async function resolveCompanyId(prefix) {
+  const sel = $(`#${prefix}-firma`);
+  if (!sel) return null;
+  if (sel.value !== "__yeni__") return sel.value || null;
+
+  const ad = $(`#${prefix}-firma-yeni`).value.trim();
+  const mevcut = companies.find((c) => c.firma_adi.toLowerCase() === ad.toLowerCase());
+  if (mevcut) return mevcut.id;
+
+  const yeni = await dbAddCompany(ad, session.username);
+  companies.push(yeni);
+  companies.sort((a, b) => a.firma_adi.localeCompare(b.firma_adi, LOCALE));
+  return yeni.id;
+}
+
 // Formdaki alanları okur ve doğrular; hata varsa mesaj döndürür
 function collectForm(prefix) {
+  const firmaSel = $(`#${prefix}-firma`).value;
   const urun = $(`#${prefix}-urun`).value.trim();
   const musteri = $(`#${prefix}-musteri`).value.trim();
   const fiyatStr = $(`#${prefix}-fiyat`).value;
@@ -302,6 +375,9 @@ function collectForm(prefix) {
 
   if (!urun) return { error: "Ürün adı boş bırakılamaz." };
   if (fiyatStr === "") return { error: "Ürün fiyatı boş bırakılamaz." };
+  if (firmaSel === "__yeni__" && !$(`#${prefix}-firma-yeni`).value.trim()) {
+    return { error: "Yeni firmanın adını yazın." };
+  }
 
   const fiyat = parseFloat(fiyatStr);
   const alinan = alinanStr === "" ? 0 : parseFloat(alinanStr);
@@ -313,6 +389,8 @@ function collectForm(prefix) {
 
   return {
     fields: {
+      // "__yeni__" seçildiyse gerçek kimlik kaydetmeden önce resolveCompanyId ile atanır
+      firma_id: firmaSel === "__yeni__" ? null : firmaSel || null,
       urun_adi: urun,
       musteri_adi: musteri,
       urun_fiyati: Math.round(fiyat * 100) / 100,
@@ -335,19 +413,36 @@ async function onNewSubmit(e) {
   // geldi" diyerek indirmeyi sessizce engelliyor (hata bile vermiyor). Bu yüzden
   // henüz sunucuya kaydedilmemiş olsa da, elimizdeki güncel veriyle hemen indiriyoruz.
   if (AUTO_BACKUP_ON_ADD) {
-    autoBackupSnapshot([...records, { ...fields, created_by: session.username }]);
+    // Yeni firma yazıldıysa kimliği henüz yok ama adını biliyoruz; yedeğe adı yazılır.
+    const firmaAdi =
+      $("#n-firma").value === "__yeni__"
+        ? $("#n-firma-yeni").value.trim()
+        : companyName(fields.firma_id);
+    autoBackupSnapshot([...records, { ...fields, _firma_adi: firmaAdi, created_by: session.username }]);
   }
 
   try {
+    fields.firma_id = await resolveCompanyId("n"); // gerekirse yeni firmayı oluşturur
     await dbAddRecord(fields, session.username);
     $("#form-new").reset();
     $("#n-tarih").value = todayISO();
+    toggleNewCompany("n");
     await loadRecords();
+    await loadCompanies();
     renderCurrentView();
     toast("✅ Kayıt başarıyla eklendi." + (AUTO_BACKUP_ON_ADD ? " 💾 Yedek indirildi." : ""));
   } catch (err) {
-    toast("Kayıt eklenemedi: " + (err.message || err), "error");
+    toast("Kayıt eklenemedi: " + firmaHatasi(err), "error");
   }
+}
+
+// Firma sütunu/tablosu henüz veritabanında yoksa anlaşılır bir yol gösterir
+function firmaHatasi(err) {
+  const msg = (err && err.message) || String(err);
+  if (/firma_id|companies/i.test(msg)) {
+    return "firma özelliği için db/upgrade-firmalar.sql dosyasını Supabase → SQL Editor'de bir kez çalıştırmanız gerekiyor.";
+  }
+  return msg;
 }
 
 // Filtreden bağımsız, verilen (varsayılan: TÜM) kayıtların anlık Excel yedeğini
@@ -359,6 +454,7 @@ function autoBackupSnapshot(rows_) {
   try {
     const rows = source.map((r) => ({
       Tarih: fmtTarih(r.tarih),
+      Firma: r._firma_adi ?? companyName(r.firma_id),
       "Ürün Adı": r.urun_adi,
       "Müşteri Adı": r.musteri_adi || "",
       "Ürün Fiyatı": Number(r.urun_fiyati),
@@ -393,22 +489,38 @@ function fillUserFilter() {
   sel.value = current;
 }
 
+// Firma filtresi listesi ("__yok__" = firması girilmemiş kayıtlar)
+function fillFirmaFilter() {
+  const sel = $("#f-firma");
+  if (!sel) return;
+  const current = sel.value;
+  sel.innerHTML =
+    '<option value="">Tümü</option>' +
+    companies.map((c) => `<option value="${esc(c.id)}">${esc(c.firma_adi)}</option>`).join("") +
+    '<option value="__yok__">— Firmasız kayıtlar —</option>';
+  sel.value = current;
+}
+
 function getFilteredRecords() {
   const q = $("#f-search").value.trim().toLowerCase();
   const from = $("#f-date-from").value;
   const to = $("#f-date-to").value;
   const durum = $("#f-durum").value;
   const user = $("#f-user").value;
+  const firma = $("#f-firma").value;
 
   return records.filter((r) => {
     if (q) {
-      const hay = `${r.urun_adi || ""} ${r.musteri_adi || ""} ${r.aciklama || ""}`.toLowerCase();
+      const hay = `${companyName(r.firma_id)} ${r.urun_adi || ""} ${r.musteri_adi || ""} ${r.aciklama || ""}`.toLowerCase();
       if (!hay.includes(q)) return false;
     }
     if (from && r.tarih < from) return false;
     if (to && r.tarih > to) return false;
     if (durum && statusOf(r) !== durum) return false;
     if (user && r.created_by !== user) return false;
+    if (firma === "__yok__") {
+      if (r.firma_id) return false;
+    } else if (firma && r.firma_id !== firma) return false;
     return true;
   });
 }
@@ -421,15 +533,17 @@ function renderRecords() {
   $("#records-count").textContent = `${rows.length} kayıt gösteriliyor (toplam ${records.length})`;
 
   if (rows.length === 0) {
-    tbody.innerHTML = `<tr class="empty-row"><td colspan="10">Gösterilecek kayıt yok.</td></tr>`;
+    tbody.innerHTML = `<tr class="empty-row"><td colspan="11">Gösterilecek kayıt yok.</td></tr>`;
     return;
   }
 
   tbody.innerHTML = rows
     .map((r) => {
       const st = statusOf(r);
+      const firma = companyName(r.firma_id);
       return `<tr>
         <td>${fmtTarih(r.tarih)}</td>
+        <td>${firma ? esc(firma) : "<span class='muted'>—</span>"}</td>
         <td><b>${esc(r.urun_adi)}</b></td>
         <td>${esc(r.musteri_adi) || "<span class='muted'>—</span>"}</td>
         <td class="num">${fmtPara(r.urun_fiyati)}</td>
@@ -465,6 +579,9 @@ async function onRecordsTableClick(e) {
 
 function openEditModal(record) {
   editingRecord = record;
+  $("#e-firma-yeni").value = "";
+  $("#e-firma").value = record.firma_id || "";
+  toggleNewCompany("e");
   $("#e-urun").value = record.urun_adi;
   $("#e-musteri").value = record.musteri_adi || "";
   $("#e-fiyat").value = record.urun_fiyati;
@@ -492,6 +609,12 @@ async function onEditSubmit(e) {
   const { fields, error } = collectForm("e");
   if (error) return toast(error, "error");
 
+  try {
+    fields.firma_id = await resolveCompanyId("e"); // gerekirse yeni firmayı oluşturur
+  } catch (err) {
+    return toast("Firma eklenemedi: " + firmaHatasi(err), "error");
+  }
+
   // Sadece değişen alanları geçmişe yaz
   const oldValues = {};
   const newValues = {};
@@ -513,10 +636,11 @@ async function onEditSubmit(e) {
     await dbUpdateRecord(editingRecord.id, fields, oldValues, session.username);
     closeEditModal();
     await loadRecords();
+    await loadCompanies();
     renderCurrentView();
     toast("✅ Kayıt güncellendi.");
   } catch (err) {
-    toast("Güncellenemedi: " + (err.message || err), "error");
+    toast("Güncellenemedi: " + firmaHatasi(err), "error");
   }
 }
 
@@ -534,6 +658,7 @@ async function deleteRecord(record) {
 
   try {
     const snapshot = {
+      firma_id: record.firma_id,
       urun_adi: record.urun_adi,
       musteri_adi: record.musteri_adi,
       urun_fiyati: record.urun_fiyati,
@@ -736,11 +861,151 @@ async function onStockTablesClick(e) {
 }
 
 // ============================================================
+// FİRMALAR
+// ============================================================
+
+async function renderFirmalar() {
+  await loadCompanies();
+  renderFirmaTable();
+}
+
+// Her firma için kayıt sayısı ve para toplamları (kayıtlardan hesaplanır)
+function companyTotals() {
+  const map = {};
+  for (const c of companies) map[c.id] = { firma: c, adet: 0, fiyat: 0, alinan: 0, kalan: 0 };
+  for (const r of records) {
+    const s = map[r.firma_id];
+    if (!s) continue;
+    s.adet++;
+    s.fiyat += Number(r.urun_fiyati) || 0;
+    s.alinan += Number(r.alinan_para) || 0;
+    s.kalan += Number(r.kalan_para) || 0;
+  }
+  return Object.values(map);
+}
+
+function renderFirmaTable() {
+  const tbody = $("#firmalar-tbody");
+  const isAdmin = session.role === "admin";
+
+  if (!companiesReady) {
+    $("#firmalar-count").textContent = "";
+    tbody.innerHTML =
+      '<tr class="empty-row"><td colspan="7">Firma tablosu veritabanında bulunamadı. Supabase → SQL Editor\'de <b>db/upgrade-firmalar.sql</b> dosyasını bir kez çalıştırın, sonra sayfayı yenileyin.</td></tr>';
+    return;
+  }
+
+  const rows = companyTotals();
+  $("#firmalar-count").textContent = rows.length ? `${rows.length} firma kayıtlı` : "";
+
+  if (!rows.length) {
+    tbody.innerHTML =
+      '<tr class="empty-row"><td colspan="7">Henüz firma eklenmedi. Yukarıdaki formdan ilk firmayı ekleyin.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = rows
+    .map(({ firma, adet, fiyat, alinan, kalan }) => {
+      const kalanCls = kalan > 0 ? "stok-neg" : "stok-poz";
+      return `<tr>
+        <td><b>${esc(firma.firma_adi)}</b></td>
+        <td class="num">${adet}</td>
+        <td class="num">${fmtPara(fiyat)}</td>
+        <td class="num">${fmtPara(alinan)}</td>
+        <td class="num ${kalanCls}">${fmtPara(kalan)}</td>
+        <td>${esc(firma.created_by) || "<span class='muted'>—</span>"}</td>
+        <td class="td-actions">
+          <button class="btn btn-outline btn-sm" data-faction="edit" data-id="${firma.id}">✏️ Düzenle</button>
+          ${isAdmin ? `<button class="btn btn-danger btn-sm" data-faction="delete" data-id="${firma.id}">🗑 Sil</button>` : ""}
+        </td>
+      </tr>`;
+    })
+    .join("");
+}
+
+async function onFirmaSubmit(e) {
+  e.preventDefault();
+  const ad = $("#fi-ad").value.trim();
+  if (!ad) return toast("Firma adı boş olamaz.", "error");
+
+  try {
+    await dbAddCompany(ad, session.username);
+    $("#form-firma").reset();
+    await loadCompanies();
+    renderFirmaTable();
+    toast(`✅ "${ad}" firması eklendi.`);
+  } catch (err) {
+    toast("Firma eklenemedi: " + firmaHatasi(err), "error");
+  }
+}
+
+async function onFirmalarTableClick(e) {
+  const btn = e.target.closest("button[data-faction]");
+  if (!btn) return;
+  const firma = companies.find((c) => c.id === btn.dataset.id);
+  if (!firma) return;
+
+  if (btn.dataset.faction === "edit") {
+    openEditFirma(firma);
+  } else if (btn.dataset.faction === "delete") {
+    if (session.role !== "admin") return toast("Silme yetkiniz yok.", "error");
+    const bagli = records.filter((r) => r.firma_id === firma.id).length;
+    const ok = await confirmDialog(
+      `"${firma.firma_adi}" firması silinecek.` +
+        (bagli
+          ? ` Bu firmaya bağlı ${bagli} kayıt SİLİNMEZ, sadece firma bilgisi boşalır.`
+          : "")
+    );
+    if (!ok) return;
+    try {
+      await dbDeleteCompany(firma.id);
+      await Promise.all([loadRecords(), loadCompanies()]);
+      renderFirmaTable();
+      toast("🗑 Firma silindi.");
+    } catch (err) {
+      toast("Silinemedi: " + firmaHatasi(err), "error");
+    }
+  }
+}
+
+function openEditFirma(firma) {
+  editingCompany = firma;
+  $("#ef-ad").value = firma.firma_adi;
+  $("#modal-edit-firma").classList.remove("hidden");
+}
+
+function closeEditFirma() {
+  editingCompany = null;
+  $("#modal-edit-firma").classList.add("hidden");
+}
+
+async function onEditFirmaSave() {
+  if (!editingCompany) return;
+  const ad = $("#ef-ad").value.trim();
+  if (!ad) return toast("Firma adı boş olamaz.", "error");
+  if (ad === editingCompany.firma_adi) {
+    closeEditFirma();
+    return toast("Değişiklik yapılmadı.");
+  }
+
+  try {
+    await dbUpdateCompany(editingCompany.id, ad);
+    closeEditFirma();
+    await loadCompanies();
+    renderFirmaTable();
+    toast(`✅ Firma adı "${ad}" olarak güncellendi.`);
+  } catch (err) {
+    toast("Güncellenemedi: " + firmaHatasi(err), "error");
+  }
+}
+
+// ============================================================
 // İŞLEM GEÇMİŞİ
 // ============================================================
 
 function formatDiffValue(key, val) {
   if (val === null || val === undefined || val === "") return "—";
+  if (key === "firma_id") return companyName(val) || "—";
   if (MONEY_FIELDS.includes(key)) return fmtPara(val);
   if (key === "tarih") return fmtTarih(val);
   return String(val);
@@ -992,6 +1257,7 @@ async function onEditUserSave() {
 function exportRows() {
   return getFilteredRecords().map((r) => ({
     Tarih: fmtTarih(r.tarih),
+    Firma: companyName(r.firma_id),
     "Ürün Adı": r.urun_adi,
     "Müşteri Adı": r.musteri_adi || "",
     "Ürün Fiyatı": Number(r.urun_fiyati),
@@ -1151,6 +1417,14 @@ function wireEvents() {
   $("#s-urun").addEventListener("change", toggleYeniUrun);
   $("#view-stok").addEventListener("click", onStockTablesClick);
 
+  // Firmalar
+  $("#form-firma").addEventListener("submit", onFirmaSubmit);
+  $("#firmalar-tbody").addEventListener("click", onFirmalarTableClick);
+  $("#btn-edit-firma-save").addEventListener("click", onEditFirmaSave);
+  $("#btn-edit-firma-cancel").addEventListener("click", closeEditFirma);
+  $("#n-firma").addEventListener("change", () => toggleNewCompany("n"));
+  $("#e-firma").addEventListener("change", () => toggleNewCompany("e"));
+
   // Yeni kayıt
   $("#form-new").addEventListener("submit", onNewSubmit);
   attachAutoKalan("n");
@@ -1161,7 +1435,7 @@ function wireEvents() {
     await refreshData();
     toast("🔄 Liste yenilendi.");
   });
-  ["#f-search", "#f-date-from", "#f-date-to", "#f-durum", "#f-user"].forEach((sel) =>
+  ["#f-search", "#f-date-from", "#f-date-to", "#f-durum", "#f-user", "#f-firma"].forEach((sel) =>
     $(sel).addEventListener("input", renderRecords)
   );
   $("#btn-clear-filters").addEventListener("click", () => {
@@ -1170,6 +1444,7 @@ function wireEvents() {
     $("#f-date-to").value = "";
     $("#f-durum").value = "";
     $("#f-user").value = "";
+    $("#f-firma").value = "";
     renderRecords();
   });
   $("#btn-export-csv").addEventListener("click", exportCSV);

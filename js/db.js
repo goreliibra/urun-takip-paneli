@@ -29,12 +29,21 @@ async function dbFetchRecords() {
   return data;
 }
 
+// db/upgrade-firmalar.sql henüz çalıştırılmadıysa "firma_id" sütunu yoktur.
+// Böyle bir durumda kayıt eklemek/güncellemek tamamen bozulmasın diye firma
+// bilgisi olmadan tekrar denenir (firma seçilmemişse hiçbir veri kaybolmaz).
+const eksikFirmaSutunu = (error) => error && /firma_id/i.test(error.message || "");
+const firmaSuz = (obj) => {
+  const { firma_id, ...rest } = obj;
+  return rest;
+};
+
 async function dbAddRecord(fields, username) {
-  const { data, error } = await sb
-    .from("records")
-    .insert({ ...fields, created_by: username })
-    .select()
-    .single();
+  const payload = { ...fields, created_by: username };
+  let { data, error } = await sb.from("records").insert(payload).select().single();
+  if (eksikFirmaSutunu(error)) {
+    ({ data, error } = await sb.from("records").insert(firmaSuz(payload)).select().single());
+  }
   if (error) throw error;
 
   await dbAddHistory(data.id, "create", username, null, fields);
@@ -42,10 +51,11 @@ async function dbAddRecord(fields, username) {
 }
 
 async function dbUpdateRecord(id, newFields, oldFields, username) {
-  const { error } = await sb
-    .from("records")
-    .update({ ...newFields, updated_by: username, updated_at: new Date().toISOString() })
-    .eq("id", id);
+  const payload = { ...newFields, updated_by: username, updated_at: new Date().toISOString() };
+  let { error } = await sb.from("records").update(payload).eq("id", id);
+  if (eksikFirmaSutunu(error)) {
+    ({ error } = await sb.from("records").update(firmaSuz(payload)).eq("id", id));
+  }
   if (error) throw error;
 
   await dbAddHistory(id, "update", username, oldFields, newFields);
@@ -153,6 +163,42 @@ async function dbDeleteUser(id) {
   if (error) throw error;
 }
 
+// ---------- FİRMALAR ----------
+
+async function dbFetchCompanies() {
+  const { data, error } = await sb.from("companies").select("*").order("firma_adi");
+  if (error) throw error;
+  return data;
+}
+
+async function dbAddCompany(firmaAdi, username) {
+  const { data, error } = await sb
+    .from("companies")
+    .insert({ firma_adi: firmaAdi, created_by: username })
+    .select()
+    .single();
+  if (error) {
+    if (error.code === "23505") throw new Error("Bu firma zaten listede var.");
+    throw error;
+  }
+  return data;
+}
+
+async function dbUpdateCompany(id, firmaAdi) {
+  const { error } = await sb.from("companies").update({ firma_adi: firmaAdi }).eq("id", id);
+  if (error) {
+    if (error.code === "23505") throw new Error("Bu firma zaten listede var.");
+    throw error;
+  }
+}
+
+// Firma silinir; bağlı kayıtlar SİLİNMEZ, sadece firma bilgileri boşalır
+// (veritabanında "on delete set null" tanımlı).
+async function dbDeleteCompany(id) {
+  const { error } = await sb.from("companies").delete().eq("id", id);
+  if (error) throw error;
+}
+
 // ---------- STOK ----------
 
 async function dbFetchStockItems() {
@@ -216,6 +262,13 @@ function dbSubscribeStock(callback) {
     .subscribe();
 }
 
+// Firma listesi değişince (biri firma ekleyip silince) callback çalışır
+function dbSubscribeCompanies(callback) {
+  sb.channel("companies-changes")
+    .on("postgres_changes", { event: "*", schema: "public", table: "companies" }, callback)
+    .subscribe();
+}
+
 // ============================================================
 // ÖNİZLEME MODU (?demo=1)
 // Supabase kurulmadan tasarımı denemek için. VERİLER KAYDEDİLMEZ,
@@ -232,12 +285,17 @@ if (DEMO_MODE) {
     return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`;
   };
 
+  let demoCompanies = [
+    { id: "c1", firma_adi: "Yılmaz Gıda Ltd.", created_by: "admin", created_at: nowISO() },
+    { id: "c2", firma_adi: "Antalya Mutfak A.Ş.", created_by: "admin", created_at: nowISO() },
+  ];
+
   let demoRecords = [
-    { id: "d1", urun_adi: "Döner Kesme Robotu", musteri_adi: "Mehmet Yılmaz", urun_fiyati: 1450, alinan_para: 1450, kalan_para: 0, tarih: dayISO(0), aciklama: "Peşin ödendi, teslim edildi", created_by: "admin", created_at: nowISO(), updated_by: null, updated_at: null },
-    { id: "d2", urun_adi: "Elektrikli Döner Ocağı 4 Radyan", musteri_adi: "Ali Kaya", urun_fiyati: 890, alinan_para: 400, kalan_para: 490, tarih: dayISO(-2), aciklama: "Kalan tutar teslimatta ödenecek", created_by: "admin", created_at: nowISO(), updated_by: null, updated_at: null },
-    { id: "d3", urun_adi: "Kebap Tezgahı (Soğutmalı)", musteri_adi: "Restoran Antalya", urun_fiyati: 2300, alinan_para: 0, kalan_para: 2300, tarih: dayISO(-5), aciklama: "Fatura kesildi, ödeme bekleniyor", created_by: "kullanici", created_at: nowISO(), updated_by: null, updated_at: null },
-    { id: "d4", urun_adi: "Döner Bıçağı Seti", musteri_adi: "Hasan Demir", urun_fiyati: 120, alinan_para: 120, kalan_para: 0, tarih: dayISO(-1), aciklama: "", created_by: "kullanici", created_at: nowISO(), updated_by: null, updated_at: null },
-    { id: "d5", urun_adi: "Ayran Makinesi 3 Hazneli", musteri_adi: "Cafe İstanbul", urun_fiyati: 650, alinan_para: 300, kalan_para: 350, tarih: dayISO(0), aciklama: "İkinci taksit gelecek hafta", created_by: "kullanici", created_at: nowISO(), updated_by: null, updated_at: null },
+    { id: "d1", firma_id: "c1", urun_adi: "Döner Kesme Robotu", musteri_adi: "Mehmet Yılmaz", urun_fiyati: 1450, alinan_para: 1450, kalan_para: 0, tarih: dayISO(0), aciklama: "Peşin ödendi, teslim edildi", created_by: "admin", created_at: nowISO(), updated_by: null, updated_at: null },
+    { id: "d2", firma_id: "c1", urun_adi: "Elektrikli Döner Ocağı 4 Radyan", musteri_adi: "Ali Kaya", urun_fiyati: 890, alinan_para: 400, kalan_para: 490, tarih: dayISO(-2), aciklama: "Kalan tutar teslimatta ödenecek", created_by: "admin", created_at: nowISO(), updated_by: null, updated_at: null },
+    { id: "d3", firma_id: "c2", urun_adi: "Kebap Tezgahı (Soğutmalı)", musteri_adi: "Restoran Antalya", urun_fiyati: 2300, alinan_para: 0, kalan_para: 2300, tarih: dayISO(-5), aciklama: "Fatura kesildi, ödeme bekleniyor", created_by: "kullanici", created_at: nowISO(), updated_by: null, updated_at: null },
+    { id: "d4", firma_id: null, urun_adi: "Döner Bıçağı Seti", musteri_adi: "Hasan Demir", urun_fiyati: 120, alinan_para: 120, kalan_para: 0, tarih: dayISO(-1), aciklama: "", created_by: "kullanici", created_at: nowISO(), updated_by: null, updated_at: null },
+    { id: "d5", firma_id: "c2", urun_adi: "Ayran Makinesi 3 Hazneli", musteri_adi: "Cafe İstanbul", urun_fiyati: 650, alinan_para: 300, kalan_para: 350, tarih: dayISO(0), aciklama: "İkinci taksit gelecek hafta", created_by: "kullanici", created_at: nowISO(), updated_by: null, updated_at: null },
   ];
 
   let demoUsers = [
@@ -317,6 +375,31 @@ if (DEMO_MODE) {
   authLogout = async () => {};
   authSendResetMail = async () => {};
   authSetNewPassword = async () => {};
+
+  // Önizleme: firmalar
+  dbFetchCompanies = async () => [...demoCompanies];
+  dbAddCompany = async (firmaAdi, username) => {
+    if (demoCompanies.some((c) => c.firma_adi.toLowerCase() === firmaAdi.toLowerCase())) {
+      throw new Error("Bu firma zaten listede var.");
+    }
+    const c = { id: "c" + Date.now(), firma_adi: firmaAdi, created_by: username, created_at: nowISO() };
+    demoCompanies.push(c);
+    return c;
+  };
+  dbUpdateCompany = async (id, firmaAdi) => {
+    if (demoCompanies.some((c) => c.id !== id && c.firma_adi.toLowerCase() === firmaAdi.toLowerCase())) {
+      throw new Error("Bu firma zaten listede var.");
+    }
+    const c = demoCompanies.find((x) => x.id === id);
+    if (c) c.firma_adi = firmaAdi;
+  };
+  dbDeleteCompany = async (id) => {
+    demoCompanies = demoCompanies.filter((c) => c.id !== id);
+    demoRecords.forEach((r) => {
+      if (r.firma_id === id) r.firma_id = null;
+    });
+  };
+  dbSubscribeCompanies = () => {};
 
   // Önizleme: stok verileri
   let demoStockItems = [

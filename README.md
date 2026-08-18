@@ -11,13 +11,15 @@ ortak veritabanını görür, bir kişi kayıt eklediğinde diğerlerinde otomat
 - 👥 İki rol: **Admin** (her şey + silme + üye yönetimi) ve **Kullanıcı** (ekleme/düzenleme)
 - 📊 Dashboard: toplam kayıt, toplam fiyat, alınan/kalan para, bugün eklenen, borçlu kayıt sayısı
 - ➕ Kayıt ekleme: kalan para otomatik hesaplanır (elle de değiştirilebilir), negatif değer engellenir
-- 📋 Kayıt listesi: arama (ürün/müşteri/açıklama), tarih + ödeme durumu + kullanıcı filtreleri
+- 📋 Kayıt listesi: arama (firma/ürün/müşteri/açıklama), tarih + ödeme durumu + kullanıcı + firma filtreleri
 - ✏️ Düzenleme: kim, ne zaman düzenledi kaydedilir; eski/yeni değerler geçmişte saklanır
 - 🗑 Silme: sadece admin, onay sorusu ile
 - 🕓 İşlem geçmişi: hem genel sayfa hem kayıt bazında
 - 🔄 Canlı güncelleme: Supabase Realtime + 30 sn'de bir yedek yenileme
 - ⬇ CSV, Excel (xlsx) ve PDF dışa aktarma (aktif filtreye göre)
 - 👤 Kullanıcı Yönetimi: üye ekle, kullanıcı adı/rol düzelt, engelle/onayla, kalıcı sil
+- 🏢 Firmalar: firmalar **ayrı ayrı** eklenir (Firmalar sayfası), her kayıt bir firmaya
+  bağlanabilir; firma bazında kayıt sayısı, toplam fiyat, alınan ve kalan para görünür
 - 📦 Stok Takibi: giriş/çıkışlarda **isteğe bağlı birim fiyat** — ne kadara alındığı/satıldığı
   ve toplam tutar otomatik hesaplanıp gösterilir
 - 📱 Mobil uyumlu, sade koyu mavi/beyaz tasarım
@@ -126,6 +128,24 @@ düzeltme) ve **🗑 Sil** (kalıcı silme) butonları var. Düzeltme zaten çal
 gerekir (eksik olan silme yetkisini ekler). Son aktif admin silinemez/rolü düşürülemez —
 sistem kilitlenmesin diye.
 
+### Firmalar (şirketler)
+
+Sol menüde **🏢 Firmalar** sayfası var: firma adlarını buradan tek tek eklersiniz,
+adını düzeltebilir (admin ise) silebilirsiniz. Eklediğiniz firmalar hem **Yeni Kayıt**
+hem **Düzenle** formundaki **Firma** listesinde çıkar; istenirse form içindeki
+"➕ Yeni firma ekle..." seçeneğiyle kayıt eklerken de yeni firma oluşturulabilir.
+Firma alanı **zorunlu değildir** — boş bırakılan kayıtlar eskisi gibi çalışır.
+
+Kayıt listesinde **Firma** kolonu ve **Firma filtresi** (ayrıca "firmasız kayıtlar"
+seçeneği) vardır; arama kutusu firma adında da arar; CSV/Excel/PDF çıktılarına ve
+otomatik Excel yedeğine Firma kolonu eklenir. Firma adını değiştirdiğinizde ona bağlı
+tüm kayıtlarda yeni ad görünür. Bir firmayı silmek **kayıtları silmez**, sadece o
+kayıtların firma bilgisi boşalır.
+
+Bunun çalışması için `db/upgrade-firmalar.sql` dosyasını bir kez SQL Editor'de
+çalıştırmanız gerekir (yeni `companies` tablosunu ve kayıtlara isteğe bağlı `firma_id`
+sütununu ekler; mevcut veriye dokunmaz).
+
 ### Stok hareketlerinde birim fiyat
 
 Stok girişi/çıkışı yaparken artık isteğe bağlı bir **"Birim Fiyat"** alanı da var (ör.
@@ -142,8 +162,8 @@ kayıtların bir Excel kopyasını bilgisayara indirir (`js/app.js` içindeki
 kendi cihazına iner — merkezi bir yedek değildir.
 
 **2. Merkezi/otomatik yedek (önerilen):** `.github/workflows/backup.yml` **her 30 dakikada
-bir** Supabase'deki tüm tabloları (`profiles`, `records`, `history`, `stock_items`,
-`stock_moves`) JSON olarak indirip bu depoya (`backups/TARIH/`) kaydeder. Veri gerçekten
+bir** Supabase'deki tüm tabloları (`profiles`, `records`, `history`, `companies`,
+`stock_items`, `stock_moves`) JSON olarak indirip bu depoya (`backups/TARIH/`) kaydeder. Veri gerçekten
 değişmediyse yeni bir kayıt (commit) oluşturmaz, yer kaplamaz. **Hiçbir eski yedek silinmez
 — kalıcı olarak birikir**, git geçmişinin tamamı da ayrıca tarihli bir değişiklik kaydı
 gibi işlev görür. **Depo private olduğu için bu yedekler yalnızca sizin erişiminiz olan
@@ -161,13 +181,14 @@ kişiler tarafından görülebilir.** Kurulum (bir kez):
 
 ```
 urun-takip-paneli/
-├── index.html      → Tüm sayfalar (giriş, dashboard, kayıtlar, geçmiş, kullanıcılar)
+├── index.html      → Tüm sayfalar (giriş, dashboard, kayıtlar, firmalar, stok, geçmiş, kullanıcılar)
 ├── css/style.css   → Tasarım
 ├── js/config.js    → Supabase bağlantı ayarları (SİZ DOLDURACAKSINIZ)
 ├── js/auth.js      → Giriş / oturum / şifre hash'leme
 ├── js/db.js        → Veritabanı okuma-yazma katmanı
 ├── js/app.js       → Uygulama mantığı (görünümler, filtreler, export...)
-└── db/setup.sql    → Veritabanı kurulum betiği (Supabase SQL Editor'de çalıştırın)
+├── db/setup.sql    → Veritabanı kurulum betiği (Supabase SQL Editor'de çalıştırın)
+└── db/upgrade-firmalar.sql → Firmalar tablosu + kayıtlara firma sütunu (bir kez çalıştırın)
 ```
 
 ## Güvenlik Notları

@@ -32,7 +32,7 @@ jobs:
           STAMP=$(date -u +%Y-%m-%d)
           DIR="backups/$STAMP"
           mkdir -p "$DIR"
-          for TABLE in profiles records history stock_items stock_moves; do
+          for TABLE in profiles records history companies stock_items stock_moves; do
             curl -sf "$SUPABASE_URL/rest/v1/$TABLE?select=*" \
               -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
               -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
