@@ -18,8 +18,9 @@ ortak veritabanını görür, bir kişi kayıt eklediğinde diğerlerinde otomat
 - 🔄 Canlı güncelleme: Supabase Realtime + 30 sn'de bir yedek yenileme
 - ⬇ CSV, Excel (xlsx) ve PDF dışa aktarma (aktif filtreye göre)
 - 👤 Kullanıcı Yönetimi: üye ekle, kullanıcı adı/rol düzelt, engelle/onayla, kalıcı sil
-- 🏢 Firmalar: firmalar **ayrı ayrı** eklenir (Firmalar sayfası), her kayıt bir firmaya
-  bağlanabilir; firma bazında kayıt sayısı, toplam fiyat, alınan ve kalan para görünür
+- 🏢 Firmalar: firmalar **ayrı ayrı** eklenir; her firmanın **kendi sayfası** vardır —
+  ana sayfa gibi özet kutuları, o firmaya ürün ekleme, ürünü düzenleme/silme ve
+  firmaya özel CSV/Excel/PDF çıktısı
 - 📦 Stok Takibi: giriş/çıkışlarda **isteğe bağlı birim fiyat** — ne kadara alındığı/satıldığı
   ve toplam tutar otomatik hesaplanıp gösterilir
 - 📱 Mobil uyumlu, sade koyu mavi/beyaz tasarım
@@ -135,6 +136,19 @@ adını düzeltebilir (admin ise) silebilirsiniz. Eklediğiniz firmalar hem **Ye
 hem **Düzenle** formundaki **Firma** listesinde çıkar; istenirse form içindeki
 "➕ Yeni firma ekle..." seçeneğiyle kayıt eklerken de yeni firma oluşturulabilir.
 Firma alanı **zorunlu değildir** — boş bırakılan kayıtlar eskisi gibi çalışır.
+
+**Firmanın kendi sayfası:** Firma listesinde firma adına (ya da **📂 Aç** butonuna)
+tıklayın. Açılan sayfa ana sayfa mantığında çalışır:
+
+- Üstte özet kutuları: o firmanın **ürün/kayıt sayısı, toplam fiyat, alınan para,
+  kalan para, borcu kalan kayıt** sayısı
+- **"Bu Firmaya Ürün Ekle"** formu: ürün adı, müşteri, fiyat, alınan para (kalan
+  otomatik hesaplanır), tarih, açıklama — kayıt otomatik olarak o firmaya bağlanır
+- Firmanın ürün listesi: her satırda **✏️ düzenle**, **🕓 geçmiş**, **🗑 sil** (silme
+  yalnızca admin)
+- **✏️ Firma Adı** butonuyla firma adını oradan düzeltme
+- **⬇ CSV / Excel / PDF**: yalnızca o firmanın ürünleri (dosya adında firma adı geçer)
+- **← Firmalar** ile listeye dönülür
 
 Kayıt listesinde **Firma** kolonu ve **Firma filtresi** (ayrıca "firmasız kayıtlar"
 seçeneği) vardır; arama kutusu firma adında da arar; CSV/Excel/PDF çıktılarına ve

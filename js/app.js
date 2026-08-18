@@ -114,6 +114,7 @@ let currentView = "dashboard";
 let editingRecord = null;
 let editingUser = null;
 let editingCompany = null;
+let openCompanyId = null; // "Firma sayfası" açıkken hangi firmayı gösteriyoruz
 let pollTimer = null;
 
 // E-postasız eklenen üyeler için otomatik üretilen adres uzantısı
@@ -198,6 +199,7 @@ async function enterApp() {
   dbSubscribeCompanies(async () => {
     await loadCompanies();
     if (currentView === "firmalar") renderFirmaTable();
+    else if (currentView === "firma-detay") renderFirmaDetay();
     else if (currentView === "records") renderRecords();
   });
 
@@ -266,7 +268,9 @@ function showView(name) {
   currentView = name;
   $$(".view").forEach((v) => v.classList.add("hidden"));
   $(`#view-${name}`).classList.remove("hidden");
-  $$(".nav-link").forEach((l) => l.classList.toggle("active", l.dataset.view === name));
+  // Firma sayfası menüde ayrı bir madde değil; menüde "Firmalar" işaretli kalır
+  const navName = name === "firma-detay" ? "firmalar" : name;
+  $$(".nav-link").forEach((l) => l.classList.toggle("active", l.dataset.view === navName));
   setSidebar(false);
   renderCurrentView();
 }
@@ -282,6 +286,7 @@ function renderCurrentView() {
   else if (currentView === "records") renderRecords();
   else if (currentView === "stok") renderStok();
   else if (currentView === "firmalar") renderFirmalar();
+  else if (currentView === "firma-detay") renderFirmaDetay();
   else if (currentView === "history") renderHistoryPage();
   else if (currentView === "users") renderUsers();
 }
@@ -908,13 +913,14 @@ function renderFirmaTable() {
     .map(({ firma, adet, fiyat, alinan, kalan }) => {
       const kalanCls = kalan > 0 ? "stok-neg" : "stok-poz";
       return `<tr>
-        <td><b>${esc(firma.firma_adi)}</b></td>
+        <td><button class="link-btn" data-faction="open" data-id="${firma.id}"><b>${esc(firma.firma_adi)}</b></button></td>
         <td class="num">${adet}</td>
         <td class="num">${fmtPara(fiyat)}</td>
         <td class="num">${fmtPara(alinan)}</td>
         <td class="num ${kalanCls}">${fmtPara(kalan)}</td>
         <td>${esc(firma.created_by) || "<span class='muted'>—</span>"}</td>
         <td class="td-actions">
+          <button class="btn btn-primary btn-sm" data-faction="open" data-id="${firma.id}">📂 Aç</button>
           <button class="btn btn-outline btn-sm" data-faction="edit" data-id="${firma.id}">✏️ Düzenle</button>
           ${isAdmin ? `<button class="btn btn-danger btn-sm" data-faction="delete" data-id="${firma.id}">🗑 Sil</button>` : ""}
         </td>
@@ -945,7 +951,9 @@ async function onFirmalarTableClick(e) {
   const firma = companies.find((c) => c.id === btn.dataset.id);
   if (!firma) return;
 
-  if (btn.dataset.faction === "edit") {
+  if (btn.dataset.faction === "open") {
+    openFirmaDetay(firma);
+  } else if (btn.dataset.faction === "edit") {
     openEditFirma(firma);
   } else if (btn.dataset.faction === "delete") {
     if (session.role !== "admin") return toast("Silme yetkiniz yok.", "error");
@@ -965,6 +973,114 @@ async function onFirmalarTableClick(e) {
     } catch (err) {
       toast("Silinemedi: " + firmaHatasi(err), "error");
     }
+  }
+}
+
+// ---------- FİRMA SAYFASI (bir firmanın kendi ürünleri) ----------
+
+// Açık firmaya ait kayıtlar (tarih sırası dbFetchRecords'tan gelir)
+function firmaRecords() {
+  return records.filter((r) => r.firma_id === openCompanyId);
+}
+
+function openFirmaDetay(firma) {
+  openCompanyId = firma.id;
+  // Formdaki firma sabittir: gizli listeye yalnızca bu firma yazılır
+  const sel = $("#fd-firma");
+  sel.innerHTML = `<option value="${esc(firma.id)}">${esc(firma.firma_adi)}</option>`;
+  $("#form-firma-detay").reset();
+  sel.value = firma.id;
+  $("#fd-tarih").value = todayISO();
+  showView("firma-detay");
+}
+
+function renderFirmaDetay() {
+  const firma = companies.find((c) => c.id === openCompanyId);
+  if (!firma) return showView("firmalar"); // firma silinmiş/bulunamadıysa listeye dön
+
+  $("#fd-baslik").textContent = `🏢 ${firma.firma_adi}`;
+  $("#fd-form-baslik").textContent = `"${firma.firma_adi}" Firmasına Ürün Ekle`;
+  $("#fd-firma").innerHTML = `<option value="${esc(firma.id)}">${esc(firma.firma_adi)}</option>`;
+
+  const rows = firmaRecords();
+  let fiyat = 0, alinan = 0, kalan = 0, borclu = 0;
+  for (const r of rows) {
+    fiyat += Number(r.urun_fiyati) || 0;
+    alinan += Number(r.alinan_para) || 0;
+    kalan += Number(r.kalan_para) || 0;
+    if ((Number(r.kalan_para) || 0) > 0) borclu++;
+  }
+
+  $("#fd-stat-count").textContent = rows.length;
+  $("#fd-stat-price").textContent = fmtPara(fiyat);
+  $("#fd-stat-paid").textContent = fmtPara(alinan);
+  $("#fd-stat-due").textContent = fmtPara(kalan);
+  $("#fd-stat-debt").textContent = borclu;
+  $("#fd-count").textContent = rows.length ? `${rows.length} ürün / kayıt` : "";
+
+  const isAdmin = session.role === "admin";
+  const tbody = $("#fd-tbody");
+
+  if (!rows.length) {
+    tbody.innerHTML =
+      '<tr class="empty-row"><td colspan="10">Bu firmaya ait ürün yok. Yukarıdaki formdan ilk ürünü ekleyin.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = rows
+    .map((r) => {
+      const st = statusOf(r);
+      return `<tr>
+        <td>${fmtTarih(r.tarih)}</td>
+        <td><b>${esc(r.urun_adi)}</b></td>
+        <td>${esc(r.musteri_adi) || "<span class='muted'>—</span>"}</td>
+        <td class="num">${fmtPara(r.urun_fiyati)}</td>
+        <td class="num">${fmtPara(r.alinan_para)}</td>
+        <td class="num"><b>${fmtPara(r.kalan_para)}</b></td>
+        <td><span class="badge badge-${st}">${STATUS_TEXT[st]}</span></td>
+        <td>${esc(r.aciklama) || "<span class='muted'>—</span>"}</td>
+        <td>${esc(r.created_by)}</td>
+        <td class="td-actions">
+          <button class="btn btn-outline btn-sm" data-action="edit" data-id="${r.id}">✏️</button>
+          <button class="btn btn-outline btn-sm" data-action="log" data-id="${r.id}">🕓</button>
+          ${isAdmin ? `<button class="btn btn-danger btn-sm" data-action="delete" data-id="${r.id}">🗑</button>` : ""}
+        </td>
+      </tr>`;
+    })
+    .join("");
+}
+
+// Firma sayfasından ürün ekleme (kayıt otomatik olarak bu firmaya bağlanır)
+async function onFirmaDetaySubmit(e) {
+  e.preventDefault();
+  const firma = companies.find((c) => c.id === openCompanyId);
+  if (!firma) return toast("Firma bulunamadı, listeye dönün.", "error");
+
+  const { fields, error } = collectForm("fd");
+  if (error) return toast(error, "error");
+  fields.firma_id = openCompanyId;
+
+  // Yeni Kayıt sayfasındaki gibi: yedek indirme tıklamayla eş zamanlı tetiklenir
+  if (AUTO_BACKUP_ON_ADD) {
+    autoBackupSnapshot([
+      ...records,
+      { ...fields, _firma_adi: firma.firma_adi, created_by: session.username },
+    ]);
+  }
+
+  try {
+    await dbAddRecord(fields, session.username);
+    $("#form-firma-detay").reset();
+    $("#fd-firma").value = openCompanyId;
+    $("#fd-tarih").value = todayISO();
+    await loadRecords();
+    renderFirmaDetay();
+    toast(
+      `✅ Ürün "${firma.firma_adi}" firmasına eklendi.` +
+        (AUTO_BACKUP_ON_ADD ? " 💾 Yedek indirildi." : "")
+    );
+  } catch (err) {
+    toast("Kayıt eklenemedi: " + firmaHatasi(err), "error");
   }
 }
 
@@ -992,7 +1108,7 @@ async function onEditFirmaSave() {
     await dbUpdateCompany(editingCompany.id, ad);
     closeEditFirma();
     await loadCompanies();
-    renderFirmaTable();
+    renderCurrentView(); // firma listesi ya da açık firma sayfası yenilenir
     toast(`✅ Firma adı "${ad}" olarak güncellendi.`);
   } catch (err) {
     toast("Güncellenemedi: " + firmaHatasi(err), "error");
@@ -1254,8 +1370,19 @@ async function onEditUserSave() {
 // DIŞA AKTARMA (CSV / Excel)
 // ============================================================
 
-function exportRows() {
-  return getFilteredRecords().map((r) => ({
+// Dosya adı için Türkçe karakterleri sadeleştirir
+function slugify(s) {
+  return String(s)
+    .toLowerCase()
+    .replace(/ç/g, "c").replace(/ğ/g, "g").replace(/ı/g, "i")
+    .replace(/ö/g, "o").replace(/ş/g, "s").replace(/ü/g, "u")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+// Liste verilmezse ekrandaki filtreye uyan kayıtlar aktarılır
+function exportRows(list) {
+  return (list || getFilteredRecords()).map((r) => ({
     Tarih: fmtTarih(r.tarih),
     Firma: companyName(r.firma_id),
     "Ürün Adı": r.urun_adi,
@@ -1269,8 +1396,8 @@ function exportRows() {
   }));
 }
 
-function exportCSV() {
-  const rows = exportRows();
+function exportCSV(list, adEki) {
+  const rows = exportRows(list);
   if (!rows.length) return toast("Aktarılacak kayıt yok.", "error");
 
   const headers = Object.keys(rows[0]);
@@ -1282,29 +1409,31 @@ function exportCSV() {
     "\n" +
     rows.map((r) => headers.map((h) => quote(r[h])).join(";")).join("\n");
 
-  downloadBlob(new Blob([csv], { type: "text/csv;charset=utf-8" }), `urun-takip-${todayISO()}.csv`);
+  const ek = adEki ? slugify(adEki) + "-" : "";
+  downloadBlob(new Blob([csv], { type: "text/csv;charset=utf-8" }), `urun-takip-${ek}${todayISO()}.csv`);
   toast("⬇ CSV dosyası indirildi.");
 }
 
-function exportExcel() {
+function exportExcel(list, adEki) {
   if (typeof XLSX === "undefined") {
     return toast("Excel kütüphanesi yüklenemedi, CSV kullanın.", "error");
   }
-  const rows = exportRows();
+  const rows = exportRows(list);
   if (!rows.length) return toast("Aktarılacak kayıt yok.", "error");
 
   const ws = XLSX.utils.json_to_sheet(rows);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Kayıtlar");
-  XLSX.writeFile(wb, `urun-takip-${todayISO()}.xlsx`);
+  const ek = adEki ? slugify(adEki) + "-" : "";
+  XLSX.writeFile(wb, `urun-takip-${ek}${todayISO()}.xlsx`);
   toast("⬇ Excel dosyası indirildi.");
 }
 
-function exportPDF() {
+function exportPDF(list, adEki) {
   if (typeof window.jspdf === "undefined") {
     return toast("PDF kütüphanesi yüklenemedi, CSV/Excel kullanın.", "error");
   }
-  const rows = exportRows();
+  const rows = exportRows(list);
   if (!rows.length) return toast("Aktarılacak kayıt yok.", "error");
 
   const MONEY_COLS = ["Ürün Fiyatı", "Alınan Para", "Kalan Para"];
@@ -1316,7 +1445,7 @@ function exportPDF() {
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ orientation: "landscape" });
   doc.setFontSize(14);
-  doc.text("Ürün Takip Paneli - Kayıt Listesi", 14, 15);
+  doc.text(adEki ? `Ürün Takip Paneli - ${adEki}` : "Ürün Takip Paneli - Kayıt Listesi", 14, 15);
   doc.setFontSize(9);
   doc.text(new Date().toLocaleString(LOCALE), 14, 21);
   doc.autoTable({
@@ -1327,7 +1456,7 @@ function exportPDF() {
     headStyles: { fillColor: [30, 58, 95] },
   });
 
-  doc.save(`urun-takip-${todayISO()}.pdf`);
+  doc.save(`urun-takip-${adEki ? slugify(adEki) + "-" : ""}${todayISO()}.pdf`);
   toast("⬇ PDF dosyası indirildi.");
 }
 
@@ -1425,6 +1554,20 @@ function wireEvents() {
   $("#n-firma").addEventListener("change", () => toggleNewCompany("n"));
   $("#e-firma").addEventListener("change", () => toggleNewCompany("e"));
 
+  // Firma sayfası (bir firmanın kendi ürünleri)
+  $("#form-firma-detay").addEventListener("submit", onFirmaDetaySubmit);
+  attachAutoKalan("fd");
+  $("#fd-tbody").addEventListener("click", onRecordsTableClick);
+  $("#btn-fd-back").addEventListener("click", () => showView("firmalar"));
+  $("#btn-fd-rename").addEventListener("click", () => {
+    const firma = companies.find((c) => c.id === openCompanyId);
+    if (firma) openEditFirma(firma);
+  });
+  const acikFirmaAdi = () => companyName(openCompanyId) || "firma";
+  $("#btn-fd-csv").addEventListener("click", () => exportCSV(firmaRecords(), acikFirmaAdi()));
+  $("#btn-fd-xlsx").addEventListener("click", () => exportExcel(firmaRecords(), acikFirmaAdi()));
+  $("#btn-fd-pdf").addEventListener("click", () => exportPDF(firmaRecords(), acikFirmaAdi()));
+
   // Yeni kayıt
   $("#form-new").addEventListener("submit", onNewSubmit);
   attachAutoKalan("n");
@@ -1447,9 +1590,9 @@ function wireEvents() {
     $("#f-firma").value = "";
     renderRecords();
   });
-  $("#btn-export-csv").addEventListener("click", exportCSV);
-  $("#btn-export-xlsx").addEventListener("click", exportExcel);
-  $("#btn-export-pdf").addEventListener("click", exportPDF);
+  $("#btn-export-csv").addEventListener("click", () => exportCSV());
+  $("#btn-export-xlsx").addEventListener("click", () => exportExcel());
+  $("#btn-export-pdf").addEventListener("click", () => exportPDF());
 
   // Düzenleme
   $("#form-edit").addEventListener("submit", onEditSubmit);

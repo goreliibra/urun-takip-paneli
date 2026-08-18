@@ -327,7 +327,7 @@
                 </div>
               </div>
               <button type="submit" class="btn btn-primary">➕ Firma Ekle</button>
-              <p class="muted">Buraya eklediğiniz firmalar "Yeni Kayıt" ve "Düzenle" formlarındaki <b>Firma</b> listesinde çıkar; her kayıt bir firmaya bağlanabilir (zorunlu değil).</p>
+              <p class="muted">Firma adına tıklayınca <b>o firmanın kendi sayfası</b> açılır: firmaya ürün ekleyebilir, ürünlerini düzenleyip silebilir, firma özetini (toplam fiyat, alınan, kalan) görebilirsiniz.</p>
             </form>
           </div>
 
@@ -347,6 +347,104 @@
                 </tr>
               </thead>
               <tbody id="firmalar-tbody"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- ==== FİRMA SAYFASI (bir firmanın kendi ürünleri) ==== -->
+        <section id="view-firma-detay" class="view hidden">
+          <div class="view-head">
+            <h2 id="fd-baslik">Firma</h2>
+            <div class="view-actions">
+              <button id="btn-fd-back" class="btn btn-outline btn-sm">← Firmalar</button>
+              <button id="btn-fd-rename" class="btn btn-outline btn-sm">✏️ Firma Adı</button>
+              <button id="btn-fd-csv" class="btn btn-outline btn-sm">⬇ CSV</button>
+              <button id="btn-fd-xlsx" class="btn btn-outline btn-sm">⬇ Excel</button>
+              <button id="btn-fd-pdf" class="btn btn-outline btn-sm">⬇ PDF</button>
+            </div>
+          </div>
+
+          <div class="stats-grid">
+            <div class="stat-card">
+              <div class="stat-label">Ürün / Kayıt Sayısı</div>
+              <div class="stat-value" id="fd-stat-count">0</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Toplam Ürün Fiyatı</div>
+              <div class="stat-value" id="fd-stat-price">0</div>
+            </div>
+            <div class="stat-card stat-green">
+              <div class="stat-label">Toplam Alınan Para</div>
+              <div class="stat-value" id="fd-stat-paid">0</div>
+            </div>
+            <div class="stat-card stat-red">
+              <div class="stat-label">Toplam Kalan Para</div>
+              <div class="stat-value" id="fd-stat-due">0</div>
+            </div>
+            <div class="stat-card stat-amber">
+              <div class="stat-label">Borcu Kalan Kayıt</div>
+              <div class="stat-value" id="fd-stat-debt">0</div>
+            </div>
+          </div>
+
+          <div class="card form-card">
+            <h3 id="fd-form-baslik">Bu Firmaya Ürün Ekle</h3>
+            <form id="form-firma-detay" autocomplete="off">
+              <!-- Firma sabit: açık olan firmanın kimliği burada tutulur -->
+              <div class="hidden"><select id="fd-firma"></select></div>
+              <div class="form-grid">
+                <div class="form-field">
+                  <label for="fd-urun">Ürün Adı *</label>
+                  <input type="text" id="fd-urun" required placeholder="Örn: Döner Ocağı" />
+                </div>
+                <div class="form-field">
+                  <label for="fd-musteri">Müşteri Adı</label>
+                  <input type="text" id="fd-musteri" placeholder="İsteğe bağlı" />
+                </div>
+                <div class="form-field">
+                  <label for="fd-fiyat">Ürün Fiyatı *</label>
+                  <input type="number" id="fd-fiyat" required min="0" step="0.01" placeholder="0,00" />
+                </div>
+                <div class="form-field">
+                  <label for="fd-alinan">Alınan Para</label>
+                  <input type="number" id="fd-alinan" min="0" step="0.01" placeholder="0,00" />
+                </div>
+                <div class="form-field">
+                  <label for="fd-kalan">Kalan Para <span class="muted">(otomatik, elle de değiştirilebilir)</span></label>
+                  <input type="number" id="fd-kalan" min="0" step="0.01" placeholder="0,00" />
+                </div>
+                <div class="form-field">
+                  <label for="fd-tarih">Tarih</label>
+                  <input type="date" id="fd-tarih" />
+                </div>
+                <div class="form-field form-field-full">
+                  <label for="fd-aciklama">Açıklama / Not</label>
+                  <textarea id="fd-aciklama" rows="2" placeholder="İsteğe bağlı"></textarea>
+                </div>
+              </div>
+              <button type="submit" class="btn btn-primary">💾 Kaydet</button>
+            </form>
+          </div>
+
+          <h3 class="section-title">Firmanın Ürünleri</h3>
+          <p class="muted" id="fd-count"></p>
+          <div class="table-wrap card">
+            <table>
+              <thead>
+                <tr>
+                  <th>Tarih</th>
+                  <th>Ürün Adı</th>
+                  <th>Müşteri</th>
+                  <th class="num">Fiyat</th>
+                  <th class="num">Alınan</th>
+                  <th class="num">Kalan</th>
+                  <th>Durum</th>
+                  <th>Açıklama</th>
+                  <th>Ekleyen</th>
+                  <th>İşlem</th>
+                </tr>
+              </thead>
+              <tbody id="fd-tbody"></tbody>
             </table>
           </div>
         </section>

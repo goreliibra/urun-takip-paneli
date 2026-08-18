@@ -227,6 +227,9 @@ tr:hover td { background: #fafbfd; }
 .td-actions .btn { margin-right: 4px; }
 .empty-row td { text-align: center; color: var(--gray-text); padding: 28px; }
 
+/* Firma listesinde firma adı bağlantısı: tablo yazısıyla aynı boyutta */
+.table-wrap .link-btn { font-size: inherit; text-align: left; }
+
 .section-title { margin: 22px 0 10px; }
 .stok-neg { color: var(--red); font-weight: 700; }
 .stok-poz { color: var(--green); font-weight: 700; }
