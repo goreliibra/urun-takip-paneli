@@ -170,6 +170,22 @@ Hareketler" tablosunda birim fiyat ve toplam tutar (miktar × birim fiyat) otoma
 gösterilir. Bunun çalışması için `db/upgrade-stok-fiyat.sql` dosyasını bir kez SQL
 Editor'de çalıştırmanız gerekir (yeni, isteğe bağlı bir sütun ekler).
 
+## Yayın adresleri (ikisi de aynı veritabanını kullanır)
+
+| Adres | Nasıl güncellenir |
+|---|---|
+| <https://goreliibra.github.io/urun-takip-paneli/> | `main` dalına her push'ta **otomatik** |
+| <https://urun-takip-paneli.netlify.app/> | Netlify sitesi GitHub'a bağlı **değil**; her değişiklikten sonra **elle yayınlanır** |
+
+Netlify sitesi bağlı olmadığı için bir süre eski sürümde kalmıştı (telefondan girildiğinde
+Firmalar menüsü görünmüyordu). Kalıcı çözüm: Netlify panelinde site →
+**Site configuration → Build & deploy → Link repository** ile `goreliibra/urun-takip-paneli`
+deposunu bağlayın (branch `main`, build command boş, publish directory `/`). Bağlanana kadar
+her değişiklikten sonra Netlify'a da elle yayın yapılmalıdır.
+
+> Netlify'a yalnızca uygulama dosyaları yüklenir (`index.html`, `css/`, `js/`, `icons/`,
+> `manifest.webmanifest`, `sw.js`, `robots.txt`); `backups/` ve `db/` **yüklenmez**.
+
 ## Telefonda ve bilgisayarda "uygulama gibi" kullanma
 
 Uygulama artık kurulabilir bir web uygulaması (PWA). Ana ekrandan açıldığında tarayıcı
@@ -246,6 +262,11 @@ urun-takip-paneli/
 
 ## Güvenlik Notları
 
+- **Yedekler yayınlanan siteden hariç tutulur.** Depo private olsa bile GitHub Pages
+  sayfası herkese açıktır; `backups/` klasöründeki JSON dosyaları bir süre dışarıdan
+  indirilebilir durumdaydı. `_config.yml` içindeki `exclude` listesi (`backups`, `db`,
+  `.github`, `.netlify`, `README.md`) bunu engeller — **bu dosyayı silmeyin**, yeni
+  hassas klasör eklerseniz listeye ekleyin.
 - Şifreler Supabase'in üyelik sisteminde güvenle (bcrypt) saklanır, açık metin tutulmaz.
 - Veritabanı **satır bazlı güvenlik (RLS)** ile kilitlidir: giriş yapmamış veya
   onaylanmamış hiç kimse hiçbir veriyi okuyamaz/yazamaz — sayfa kaynağındaki
