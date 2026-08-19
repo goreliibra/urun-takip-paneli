@@ -2,9 +2,22 @@
 <html lang="tr">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="robots" content="noindex, nofollow" />
   <title>Ürün Takip Paneli</title>
+
+  <!-- Telefonda/bilgisayarda "uygulama gibi" kurulabilmesi için -->
+  <link rel="manifest" href="manifest.webmanifest" />
+  <meta name="theme-color" content="#1e3a5f" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Ürün Takip" />
+  <meta name="application-name" content="Ürün Takip" />
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+  <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png" />
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png" />
+
   <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
@@ -43,6 +56,9 @@
         <div class="login-extra">
           <button type="button" id="btn-forgot" class="link-btn">Şifremi unuttum</button>
         </div>
+        <div class="login-extra">
+          <button type="button" id="btn-install-login" class="link-btn hidden">📲 Uygulama olarak yükle</button>
+        </div>
       </form>
     </div>
   </section>
@@ -71,6 +87,7 @@
         <button class="nav-link" data-view="firmalar">🏢 Firmalar</button>
         <button class="nav-link" data-view="history">🕓 İşlem Geçmişi</button>
         <button class="nav-link hidden" data-view="users" id="nav-users">👥 Kullanıcılar</button>
+        <button class="nav-link nav-install hidden" id="btn-install">📲 Uygulamayı Yükle</button>
       </nav>
 
       <main class="content">
@@ -610,7 +627,7 @@
   <!-- ============ ONAY PENCERESİ ============ -->
   <div id="modal-confirm" class="modal-overlay hidden">
     <div class="modal modal-sm">
-      <h3>Emin misiniz?</h3>
+      <h3 id="confirm-title">Emin misiniz?</h3>
       <p id="confirm-text"></p>
       <div class="modal-actions">
         <button class="btn btn-outline" id="btn-confirm-cancel">Vazgeç</button>

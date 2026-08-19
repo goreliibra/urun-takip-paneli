@@ -70,7 +70,8 @@ function toast(msg, type = "success") {
 // ---------- Onay penceresi (Promise tabanlı) ----------
 
 let confirmResolve = null;
-function confirmDialog(text, okLabel = "Evet, Sil") {
+function confirmDialog(text, okLabel = "Evet, Sil", title = "Emin misiniz?") {
+  $("#confirm-title").textContent = title;
   $("#confirm-text").textContent = text;
   $("#btn-confirm-ok").textContent = okLabel;
   $("#modal-confirm").classList.remove("hidden");
@@ -1511,6 +1512,68 @@ async function logout() {
 }
 
 // ============================================================
+// UYGULAMA OLARAK YÜKLEME (telefonda/bilgisayarda "app gibi")
+// ============================================================
+
+let installPrompt = null; // tarayıcının kurulum teklifi (Android/Chrome/Edge)
+
+// Ana ekrandan (uygulama penceresinde) mi açıldı?
+const uygulamaModunda = () =>
+  window.matchMedia("(display-mode: standalone)").matches ||
+  window.matchMedia("(display-mode: fullscreen)").matches ||
+  window.navigator.standalone === true;
+
+const iosCihaz = () =>
+  /iphone|ipad|ipod/i.test(navigator.userAgent) ||
+  (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1); // iPad iOS 13+
+
+// Yükleme butonları: zaten uygulama olarak açıldıysa gizli kalır
+function updateInstallButtons() {
+  const goster = !uygulamaModunda() && (installPrompt !== null || iosCihaz());
+  ["#btn-install", "#btn-install-login"].forEach((sel) => {
+    const el = $(sel);
+    if (el) el.classList.toggle("hidden", !goster);
+  });
+}
+
+window.addEventListener("beforeinstallprompt", (e) => {
+  e.preventDefault(); // kendi butonumuzla soracağız
+  installPrompt = e;
+  updateInstallButtons();
+});
+
+window.addEventListener("appinstalled", () => {
+  installPrompt = null;
+  updateInstallButtons();
+  toast("✅ Uygulama cihaza yüklendi. Artık ana ekrandan açabilirsiniz.");
+});
+
+async function onInstallClick() {
+  if (installPrompt) {
+    installPrompt.prompt();
+    const { outcome } = await installPrompt.userChoice;
+    installPrompt = null;
+    updateInstallButtons();
+    if (outcome === "accepted") toast("📲 Uygulama yükleniyor...");
+    return;
+  }
+  // iPhone/iPad: Safari'de otomatik kurulum penceresi yok, elle eklenir
+  await confirmDialog(
+    'Safari\'de ekranın altındaki Paylaş düğmesine (kutudan çıkan ok) dokunun, açılan listeyi kaydırıp "Ana Ekrana Ekle"yi seçin. Uygulama ana ekranınıza kendi simgesiyle eklenir ve tam ekran açılır.',
+    "Anladım",
+    "📲 Ana Ekrana Ekle"
+  );
+}
+
+// Dosyaları cihazda saklayan service worker (çevrimdışı açılış + hızlı yükleme).
+// Veriler saklanmaz; ayrıntı için sw.js dosyasına bakın.
+if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
+  navigator.serviceWorker
+    .register("sw.js")
+    .catch((err) => console.warn("Service worker kaydedilemedi:", err));
+}
+
+// ============================================================
 // OLAY BAĞLAMA
 // ============================================================
 
@@ -1532,6 +1595,11 @@ function wireEvents() {
     }
   });
   $("#btn-logout").addEventListener("click", logout);
+
+  // "Uygulamayı yükle" butonları (menüde ve giriş ekranında)
+  $("#btn-install").addEventListener("click", onInstallClick);
+  $("#btn-install-login").addEventListener("click", onInstallClick);
+  updateInstallButtons();
   $("#btn-menu").addEventListener("click", () =>
     setSidebar(!$("#sidebar").classList.contains("open"))
   );

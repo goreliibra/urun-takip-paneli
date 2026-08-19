@@ -23,6 +23,8 @@ ortak veritabanını görür, bir kişi kayıt eklediğinde diğerlerinde otomat
   firmaya özel CSV/Excel/PDF çıktısı
 - 📦 Stok Takibi: giriş/çıkışlarda **isteğe bağlı birim fiyat** — ne kadara alındığı/satıldığı
   ve toplam tutar otomatik hesaplanıp gösterilir
+- 📲 **Uygulama gibi kurulum (PWA):** telefonda ana ekrana eklenip tam ekran,
+  kendi simgesiyle açılır; bilgisayarda da (Chrome/Edge) ayrı pencere olarak kurulabilir
 - 📱 Mobil uyumlu, sade koyu mavi/beyaz tasarım
 
 ## Teknoloji
@@ -168,6 +170,40 @@ Hareketler" tablosunda birim fiyat ve toplam tutar (miktar × birim fiyat) otoma
 gösterilir. Bunun çalışması için `db/upgrade-stok-fiyat.sql` dosyasını bir kez SQL
 Editor'de çalıştırmanız gerekir (yeni, isteğe bağlı bir sütun ekler).
 
+## Telefonda ve bilgisayarda "uygulama gibi" kullanma
+
+Uygulama artık kurulabilir bir web uygulaması (PWA). Ana ekrandan açıldığında tarayıcı
+adres çubuğu görünmez, kendi simgesiyle tam ekran açılır — normal bir telefon
+uygulamasından farkı olmaz.
+
+**Android (Chrome):** Siteyi açın → giriş ekranındaki **📲 Uygulama olarak yükle**
+bağlantısına ya da menüdeki **📲 Uygulamayı Yükle** düğmesine dokunun (Chrome kendi
+"Uygulamayı yükle" penceresini açar) → Yükle.
+
+**iPhone / iPad (Safari):** Siteyi **Safari'de** açın → alttaki **Paylaş** düğmesine
+(kutudan çıkan ok) dokunun → listeyi kaydırıp **"Ana Ekrana Ekle"** → Ekle.
+Uygulamadaki 📲 düğmesi bu adımları hatırlatan bir pencere gösterir.
+> iOS'ta ana ekrana eklenen uygulamanın kendi tarayıcı deposu vardır: uygulamayı ilk
+> açtığınızda bir kez daha giriş yapmanız gerekir, sonra oturum açık kalır.
+
+**Bilgisayar (Chrome/Edge):** Adres çubuğunun sağındaki **kur** simgesine basın veya
+uygulamadaki 📲 düğmesini kullanın; ayrı bir pencerede açılır, görev çubuğuna/Dock'a
+eklenir.
+
+Kurulumdan sonra:
+
+- Uygulama dosyaları (HTML/CSS/JS/simge) cihazda saklanır, açılış anında olur
+  (`sw.js`). **Veriler saklanmaz** — kayıtlar her zaman canlı veritabanından okunur,
+  eski/yanlış veri gösterilmez.
+- İnternet yokken uygulama yine açılır (giriş ekranı gelir) ama veri gelmez; bağlantı
+  dönünce kaldığı yerden çalışır.
+- İnternet varken her açılışta en güncel sürüm indirilir; yeni bir özellik eklendiğinde
+  uygulamayı kapatıp açmanız yeterlidir.
+
+Mobil kullanım için ayrıca: formlardaki yazı alanları iOS'ta artık sayfayı
+yakınlaştırmıyor, düğmeler parmakla rahat basılacak boyutta, geniş tablolar yana
+kaydırılıyor ve iPhone çentiği/alt çubuğu için güvenli alan boşlukları bırakılıyor.
+
 ## Yedekleme
 
 **1. Anlık/yerel yedek:** Her yeni kayıt eklendiğinde tarayıcı otomatik olarak tüm
@@ -196,6 +232,9 @@ kişiler tarafından görülebilir.** Kurulum (bir kez):
 ```
 urun-takip-paneli/
 ├── index.html      → Tüm sayfalar (giriş, dashboard, kayıtlar, firmalar, stok, geçmiş, kullanıcılar)
+├── manifest.webmanifest → Uygulama olarak kurulum bilgileri (ad, simge, renk)
+├── sw.js           → Service worker: dosyaları cihazda saklar (veri saklamaz)
+├── icons/          → Uygulama simgeleri (192/512 px, apple-touch-icon, favicon)
 ├── css/style.css   → Tasarım
 ├── js/config.js    → Supabase bağlantı ayarları (SİZ DOLDURACAKSINIZ)
 ├── js/auth.js      → Giriş / oturum / şifre hash'leme
