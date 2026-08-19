@@ -1,0 +1,14 @@
+# ============================================================
+# GitHub Pages (Jekyll) ayarı
+#
+# ÖNEMLİ: Depo private olsa bile GitHub Pages ile yayınlanan sayfa HERKESE
+# AÇIKTIR. Aşağıdaki klasörler bu yüzden siteye YAYINLANMAZ — özellikle
+# "backups" içinde müşteri kayıtları ve üye bilgileri duruyor.
+# ============================================================
+
+exclude:
+  - backups
+  - db
+  - .github
+  - .netlify
+  - README.md
